@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #1e293b;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Vazirmatn", "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+}
+
+input, select, textarea, button { font-family: inherit; }
+
+@utility card {
+  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+  @apply bg-indigo-600 text-white hover:bg-indigo-700;
+}
+
+@utility btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+  @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+}
+
+@utility btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+  @apply border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100;
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500;
+}
+
+@utility label {
+  @apply mb-1 block text-sm font-medium text-slate-700;
+}
+
+@utility req-star {
+  @apply text-rose-600;
+}
+
+@utility badge {
+  @apply inline-block rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+@utility alert-error {
+  @apply rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800;
+}
+
+@utility alert-success {
+  @apply rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800;
+}
+
+@utility alert-warn {
+  @apply rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800;
+}
