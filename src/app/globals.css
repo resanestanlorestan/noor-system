@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #1d342d;
+  --muted: #81938b;
+  --green: #125943;
+  --green-dark: #0d4435;
+  --line: #e8eeea;
+  --paper: #f5f8f5;
+  --gold: #b69b65;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Vazirmatn", Tahoma, sans-serif; font-size: 13px; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .58; }
+a { color: inherit; text-decoration: none; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #bda876; outline-offset: 3px; }
+::selection { background: #d9e9df; color: #174f3f; }
+
+/* Shared color tokens used by workspace stat icons across the panels. */
+.mint { background: #eaf5ee; color: #38835f; }
+.gold { background: #f8f3e6; color: #b19456; }
+.blue { background: #eef5f5; color: #679b99; }
+.lavender { background: #f1f1f9; color: #9094b6; }
+
+/* Shared inline text link (dashboards, lists, auth forms). */
+.text-link { display: inline-flex; gap: 7px; align-items: center; color: #438663; font-size: 10px; font-weight: 700; padding: 0; border: 0; background: none; }
+.text-link:hover { color: #174f37; }
