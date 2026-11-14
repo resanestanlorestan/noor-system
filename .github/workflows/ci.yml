@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # Feature tests (tests/feature/*) connect to a real PostgreSQL on
+    # 127.0.0.1:5432 — `npm test` recreates the noor_feature database from
+    # drizzle/ migrations and then runs the full suite against this service.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: noor
+          POSTGRES_PASSWORD: noor_dev_2026
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U noor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Typecheck
+        run: npx tsc --noEmit --pretty false
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Lint
+        run: npm run lint
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Full test suite (setup-feature-db + vitest)
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+          APP_ENCRYPTION_KEY: 4f1bd9c73a5e2b8c6d90e7f4a1c3b5d8e9f0a2c4b6d8e0f2a4c6b8d0e2f4a6c8
+      - name: Production build
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+          APP_ENCRYPTION_KEY: 4f1bd9c73a5e2b8c6d90e7f4a1c3b5d8e9f0a2c4b6d8e0f2a4c6b8d0e2f4a6c8

@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+/* ============================================================
+   سیستم طراحی سامانه نور — دو تم رسمی
+   تم ۱ «روشن» — سبز مریم‌گلی + طلایی (پیش‌فرض برند)
+   تم ۲ «شبانه» — شب زمردی تیره با اکسنت‌های طلایی
+   تم با data-theme روی <html> انتخاب می‌شود (light/dark)؛
+   انتخاب کاربر در localStorage با کلید «noor-theme» ذخیره می‌شود.
+   ============================================================ */
+
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+
+  /* سطوح */
+  --bg: #f5f8f5;              /* پس‌زمینه صفحه */
+  --bg-soft: #f6f9f6;         /* پس‌زمینه نرم‌تر */
+  --surface: #ffffff;         /* سطح کارت‌ها و پنل‌ها */
+  --surface-2: #fcfdfc;       /* سطح فرعی (ردیف‌ها، فیلدها) */
+
+  /* متن */
+  --ink: #1d342d;             /* متن اصلی */
+  --ink-soft: #24352f;        /* متن پررنگ ثانویه */
+  --ink-body: #263f32;        /* متن بدنه (.ws-app) */
+  --muted: #5b7565;           /* متن خنثی متوسط */
+  --muted-2: #8b9c91;         /* متن خنثی کم‌رنگ */
+  --muted-3: #a3b2a7;         /* برچسب‌های کم‌اهمیت */
+
+  /* خطوط */
+  --line: #e8efea;            /* بوردر اصلی */
+  --line-soft: #edf2ee;       /* بوردر ملایم */
+  --line-strong: #c8ded0;     /* بوردر هاور */
+
+  /* برند سبز */
+  --brand: #145c43;           /* سبز اصلی دکمه/لوگو */
+  --brand-hover: #0e573b;     /* سبز هاور دکمه */
+  --brand-text: #145943;      /* متن سبز روی پس‌زمینه روشن */
+  --on-brand: #ffffff;        /* متن روی سبز */
+
+  /* شست‌ها و چیپ‌ها */
+  --tint: #f5faf6;            /* پس‌زمینه هاور سبز خیلی ملایم */
+  --chip: #eaf5ed;            /* پس‌زمینه چیپ سبز */
+  --ring: #edf7ef;            /* حلقه فوکوس سبز ملایم */
+
+  /* طلایی */
+  --gold: #b69b65;
+  --gold-text: #b19456;
+  --gold-bright: #c4ab74;
+  --gold-tint: #fbf6e9;
+  --gold-line: #efe8d2;
+
+  /* معنایی */
+  --danger: #c0564c;
+  --danger-soft: #ba645b;
+  --danger-tint: #fdf6f5;
+  --danger-line: #f1d9d5;
+  --success: #3f7d55;
+  --info: #4a6899;
+  --info-tint: #f1f4fb;
+  --info-line: #dfe7f4;
+
+  /* آیکون‌های آمار */
+  --mint-bg: #eaf5ee;   --mint-ink: #38835f;
+  --goldchip-bg: #f8f3e6; --goldchip-ink: #b19456;
+  --bluechip-bg: #eef5f5; --bluechip-ink: #679b99;
+  --lavchip-bg: #f1f1f9;  --lavchip-ink: #9094b6;
+
+  /* لینک و انتخاب */
+  --link: #438663;
+  --link-hover: #174f37;
+  --focus-ring: #bda876;
+  --selection-bg: #d9e9df;
+  --selection-ink: #174f3f;
+
+  /* سایه‌ها */
+  --shadow-tint: 18, 89, 67;         /* rgb سبز برای سایه‌های ملایم */
+  --shadow-backdrop: #0b2a1f80;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* سطوح */
+  --bg: #0c1411;
+  --bg-soft: #0e1713;
+  --surface: #131f19;
+  --surface-2: #182520;
+
+  /* متن */
+  --ink: #e3ece6;
+  --ink-soft: #c9d8cf;
+  --ink-body: #dfe9e3;
+  --muted: #9db1a5;
+  --muted-2: #7f948a;
+  --muted-3: #647a70;
+
+  /* خطوط */
+  --line: #243630;
+  --line-soft: #1e2e28;
+  --line-strong: #2f4a3d;
+
+  /* برند سبز — روی تاریک باید روشن‌تر باشد */
+  --brand: #2e7d5b;
+  --brand-hover: #276b4e;
+  --brand-text: #7ec9a3;
+  --on-brand: #f3faf5;
+
+  /* شست‌ها و چیپ‌ها */
+  --tint: #17241e;
+  --chip: #1b2c25;
+  --ring: #1d3329;
+
+  /* طلایی */
+  --gold: #d2b677;
+  --gold-text: #d5b87c;
+  --gold-bright: #ddc28c;
+  --gold-tint: #2a281c;
+  --gold-line: #453f28;
+
+  /* معنایی */
+  --danger: #e0897f;
+  --danger-soft: #d98d84;
+  --danger-tint: #33221f;
+  --danger-line: #4a2c27;
+  --success: #6bbf8b;
+  --info: #8fb0d9;
+  --info-tint: #18222e;
+  --info-line: #27354a;
+
+  /* آیکون‌های آمار */
+  --mint-bg: #16291f;   --mint-ink: #7ec9a3;
+  --goldchip-bg: #2a2517; --goldchip-ink: #d5b87c;
+  --bluechip-bg: #16241f; --bluechip-ink: #8fbcb9;
+  --lavchip-bg: #221f2e;  --lavchip-ink: #a6abce;
+
+  /* لینک و انتخاب */
+  --link: #7ec9a3;
+  --link-hover: #a4dfc0;
+  --focus-ring: #d2b677;
+  --selection-bg: #1d3a2c;
+  --selection-ink: #d9efe2;
+
+  /* سایه‌ها */
+  --shadow-tint: 0, 0, 0;
+  --shadow-backdrop: #040a08c0;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Vazirmatn", Tahoma, sans-serif; font-size: 13px; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .58; }
+a { color: inherit; text-decoration: none; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+::selection { background: var(--selection-bg); color: var(--selection-ink); }
+
+/* گذار نرم هنگام تغییر تم (اگر کاربر حرکت را کاهش نداده باشد) */
+@media (prefers-reduced-motion: no-preference) {
+  body, .ws-app, .auth-page { transition: background-color .22s ease, color .22s ease; }
+}
+
+/* Shared color tokens used by workspace stat icons across the panels. */
+.mint { background: var(--mint-bg); color: var(--mint-ink); }
+.gold { background: var(--goldchip-bg); color: var(--goldchip-ink); }
+.blue { background: var(--bluechip-bg); color: var(--bluechip-ink); }
+.lavender { background: var(--lavchip-bg); color: var(--lavchip-ink); }
+
+/* Shared inline text link (dashboards, lists, auth forms). */
+.text-link { display: inline-flex; gap: 7px; align-items: center; color: var(--link); font-size: 10px; font-weight: 700; padding: 0; border: 0; background: none; }
+.text-link:hover { color: var(--link-hover); }
