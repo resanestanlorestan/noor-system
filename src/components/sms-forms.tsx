@@ -4,7 +4,7 @@
 // فرم تست ارسال با نمایش نتیجهٔ واقعی.
 import { useActionState, useState } from "react";
 import { LoaderCircle } from "lucide-react";
-import { saveSmsSettingsAction, saveSmsTemplateAction, sendTestSmsAction } from "@/app/actions/sms";
+import { checkSmsPanelCreditAction, saveSmsSettingsAction, saveSmsTemplateAction, sendTestSmsAction } from "@/app/actions/sms";
 import { initialActionState } from "@/lib/action-state";
 import { renderSmsBody, type SmsTemplateDef } from "@/lib/sms-templates";
 
@@ -30,21 +30,31 @@ export function SmsTemplateEditor({ def, body }: { def: SmsTemplateDef; body: st
 
 export function SmsSettingsForm({ provider, username, sender, enabled, hasSecret }: { provider: string; username: string; sender: string; enabled: boolean; hasSecret: boolean }) {
   const [state, action, pending] = useActionState(saveSmsSettingsAction, initialActionState);
-  return <form action={action} className="side-form sms-settings-form">
-    <label className="full-field">سرویس‌دهنده<select name="provider" defaultValue={provider} aria-label="سرویس‌دهنده پیامکی">
-      <option value="">بدون سرویس‌دهنده (حالت محلی)</option>
-      <option value="payamak-panel">پیامک‌پنل (rest.payamak-panel.com)</option>
-      <option value="kavenegar">کاوه‌نگار (api.kavenegar.com)</option>
-    </select></label>
-    <label className="full-field">نام کاربری پنل (پیامک‌پنل)<input name="username" defaultValue={username} maxLength={120} dir="ltr" placeholder="USERNAME" aria-label="نام کاربری پنل پیامکی" /></label>
-    <label className="full-field">{hasSecret ? "کلید API (ذخیره‌شده — برای تغییر مقدار جدید بنویسید)" : "کلید API"}<input name="secret" type="password" maxLength={200} dir="ltr" placeholder={hasSecret ? "•••••••••• (بدون تغییر رها کنید)" : "APIKey / API KEY"} autoComplete="new-password" aria-label="کلید API سرویس‌دهنده" /></label>
-    <label className="full-field">شماره خط فرستنده<input name="sender" defaultValue={sender} maxLength={31} dir="ltr" placeholder="5000..." aria-label="شماره خط فرستنده" /></label>
-    <label className="sms-switch"><input type="checkbox" name="enabled" value="1" defaultChecked={enabled} /> ارسال واقعی پیامک فعال باشد (اولویت با این تنظیمات است؛ در غیر این‌صورت متغیرهای محیطی .env)</label>
-    {state.error && <p className="form-error" role="alert">{state.error}</p>}
-    {state.success && <p className="form-success" role="status">{state.success}</p>}
-    <button disabled={pending} className="primary-button">{pending ? <LoaderCircle className="spin" size={15} /> : null} ذخیرهٔ تنظیمات</button>
-    <p className="table-footnote">کلید API با APP_ENCRYPTION_KEY رمزنگاری و فقط در دیتابیس ذخیره می‌شود و در هیچ صفحه‌ای نمایش داده نمی‌شود.</p>
-  </form>;
+  const [creditState, creditAction, creditPending] = useActionState(checkSmsPanelCreditAction, initialActionState);
+  return <>
+    <form action={action} className="side-form sms-settings-form">
+      <label className="full-field">سرویس‌دهنده<select name="provider" defaultValue={provider} aria-label="سرویس‌دهنده پیامکی">
+        <option value="">بدون سرویس‌دهنده (حالت محلی)</option>
+        <option value="payamak-panel">پیامک‌پنل (rest.payamak-panel.com)</option>
+        <option value="kavenegar">کاوه‌نگار (api.kavenegar.com)</option>
+      </select></label>
+      <label className="full-field">نام کاربری پنل (پیامک‌پنل)<input name="username" defaultValue={username} maxLength={120} dir="ltr" placeholder="USERNAME" aria-label="نام کاربری پنل پیامکی" /></label>
+      <label className="full-field">{hasSecret ? "کلید API (ذخیره‌شده — برای تغییر مقدار جدید بنویسید)" : "کلید API"}<input name="secret" type="password" maxLength={200} dir="ltr" placeholder={hasSecret ? "•••••••••• (بدون تغییر رها کنید)" : "APIKey / API KEY"} autoComplete="new-password" aria-label="کلید API سرویس‌دهنده" /></label>
+      <label className="full-field">شماره خط فرستنده<input name="sender" defaultValue={sender} maxLength={31} dir="ltr" placeholder="5000..." aria-label="شماره خط فرستنده" /></label>
+      <label className="sms-switch"><input type="checkbox" name="enabled" value="1" defaultChecked={enabled} /> ارسال واقعی پیامک فعال باشد (اولویت با این تنظیمات است؛ در غیر این‌صورت متغیرهای محیطی .env)</label>
+      {state.error && <p className="form-error" role="alert">{state.error}</p>}
+      {state.success && <p className="form-success" role="status">{state.success}</p>}
+      <button disabled={pending} className="primary-button">{pending ? <LoaderCircle className="spin" size={15} /> : null} ذخیرهٔ تنظیمات</button>
+      <p className="table-footnote">کلید API با APP_ENCRYPTION_KEY رمزنگاری و فقط در دیتابیس ذخیره می‌شود و در هیچ صفحه‌ای نمایش داده نمی‌شود.</p>
+    </form>
+    {/* الحاقیهٔ ۲.۱۰.۶ — استعلام اعتبار پنل بدون ارسال پیامک: سلامت اتصال و کلید */}
+    <form action={creditAction} className="side-form sms-credit-check">
+      <button disabled={creditPending} className="secondary-button">{creditPending ? <LoaderCircle className="spin" size={15} /> : null} بررسی اتصال و اعتبار پنل</button>
+      {creditState.error && <p className="form-error" role="alert">{creditState.error}</p>}
+      {creditState.success && <p className="form-success" role="status">{creditState.success}</p>}
+      <p className="table-footnote">با این دکمه بدون ارسال پیامک، درستی اتصال و کلید پنل آزموده می‌شود و ماندهٔ حساب نمایش داده می‌شود.</p>
+    </form>
+  </>;
 }
 
 export function SmsTestForm({ templates }: { templates: { key: string; label: string }[] }) {

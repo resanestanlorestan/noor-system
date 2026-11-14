@@ -3,7 +3,7 @@
 // (rest.payamak-panel.com) adapter — including error handling — with a
 // mocked global fetch (no database, no real network).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { normalizeIranMobile, sendSmsViaPayamakPanel, smsConfigured, smsProvider, smsProviderLabel } from "@/lib/messaging";
+import { getSmsPanelCredit, normalizeIranMobile, sendSmsViaPayamakPanel, smsConfigured, smsProvider, smsProviderLabel } from "@/lib/messaging";
 
 const PAYAMAK_ENV = { PAYAMAK_PANEL_USERNAME: "panel-user", PAYAMAK_PANEL_PASSWORD: "panel-pass", PAYAMAK_PANEL_SENDER: "50004001122334" };
 
@@ -143,5 +143,34 @@ describe("آداپتور پیامک‌پنل", () => {
     await withEnv(PAYAMAK_ENV, async () => {
       await expect(sendSmsViaPayamakPanel("09121234567", "متن")).rejects.toThrow(/503/);
     });
+  });
+});
+
+// الحاقیهٔ ۲.۱۰.۶ — بررسی اعتبار پنل بدون ارسال (GetCredit) برای دکمهٔ
+// «بررسی اتصال و اعتبار پنل» در داشبورد مدیریت پیامک.
+describe("بررسی اعتبار پنل (GetCredit)", () => {
+  it("بدنهٔ فرم را با نام کاربری و کلید می‌فرستد و اعتبار XMLپیچیده را می‌خواند", async () => {
+    const fetchMock = vi.fn(async (url: unknown, init?: { body?: URLSearchParams; headers?: Record<string, string> }) => {
+      expect(String(url)).toBe("https://api.payamak-panel.com/post/send.asmx/GetCredit");
+      expect(init?.headers?.["Content-Type"]).toBe("application/x-www-form-urlencoded");
+      expect(init?.body?.get("username")).toBe("panel-user");
+      expect(init?.body?.get("password")).toBe("panel-pass");
+      return new Response('<string xmlns="http://tempuri.org/">1815.2469</string>', { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getSmsPanelCredit({ provider: "payamak-panel", username: "panel-user", secret: "panel-pass", source: "environment" })).resolves.toEqual({ credit: "1815.2469", source: "environment" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("پاسخ منفی (کلید نامعتبر) خطای قابل‌فهم می‌دهد", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<string>-11</string>", { status: 200 })));
+    await expect(getSmsPanelCredit({ provider: "payamak-panel", username: "panel-user", secret: "panel-pass", source: "environment" })).rejects.toThrow(/اعتبار معتبر برگشت نشد/);
+  });
+
+  it("برای کاوه‌نگار (بدون GetCredit) خطای راهنما می‌دهد و هیچ درخواستی نمی‌زند", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getSmsPanelCredit({ provider: "kavenegar", secret: "k-1", source: "environment" })).rejects.toThrow(/فقط برای پیامک‌پنل/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

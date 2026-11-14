@@ -242,6 +242,27 @@ export async function sendSmsViaPayamakPanel(to: string, text: string, config?: 
   if (data.RetStatus !== 1) throw new Error(`PayamakPanel RetStatus=${data.RetStatus ?? "?"} (${data.StrRetStatus ?? "نامشخص"}) Value=${String(data.Value ?? "")}`);
 }
 
+/** پیامک‌پنل credit check (api.payamak-panel.com/post/send.asmx — SOAP
+ *  HTTP-POST binding) — lets the dashboard verify the gateway credentials and
+ *  remaining balance without sending anything. Errors are thrown so the
+ *  calling action can surface the exact reason. */
+export async function getSmsPanelCredit(config?: SmsConfig): Promise<{ credit: string; source: "database" | "environment" }> {
+  const cfg = config ?? await resolveSmsSettings();
+  if (!cfg) throw new Error("پنل پیامکی تنظیم نشده است؛ ابتدا تنظیمات ارسال را کامل کنید.");
+  if (cfg.provider !== "payamak-panel") throw new Error("بررسی اعتبار فقط برای پیامک‌پنل پشتیبانی می‌شود.");
+  const response = await fetch("https://api.payamak-panel.com/post/send.asmx/GetCredit", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ username: cfg.username ?? "", password: cfg.secret }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`پنل پیامکی پاسخ ${response.status} برگرداند`);
+  const text = (await response.text()).replace(/<[^>]+>/g, " ").trim();
+  const credit = Number(text);
+  if (!Number.isFinite(credit) || credit < 0) throw new Error(`اعتبار معتبر برگشت نشد (${text.slice(0, 60) || "پاسخ خالی"}) — نام کاربری/کلید را بررسی کنید.`);
+  return { credit: String(credit), source: cfg.source };
+}
+
 async function deliverSms(row: typeof messageOutbox.$inferSelect) {
   const config = await resolveSmsSettings();
   if (!config) throw new Error("پنل پیامکی تنظیم نشده است؛ پیام در حالت محلی ذخیره می‌شود");

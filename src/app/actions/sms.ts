@@ -10,7 +10,7 @@ import { db } from "@/db";
 import { messageOutbox, smsSettings, smsTemplates } from "@/db/schema";
 import { audit, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { deliverOutbox, normalizeIranMobile, resolveSmsSettings, smsReady } from "@/lib/messaging";
+import { deliverOutbox, getSmsPanelCredit, normalizeIranMobile, resolveSmsSettings, smsReady } from "@/lib/messaging";
 import { encryptSecret } from "@/lib/local-secrets";
 import { previewSmsBody, renderSmsBody, smsTemplateDef, type SmsCategory } from "@/lib/sms-templates";
 import { normalizeText } from "@/lib/format";
@@ -99,6 +99,20 @@ export async function saveSmsSettingsAction(_state: ActionState, data: FormData)
   revalidatePath("/outbox");
   if (enabled && !nowReady) return { success: "تنظیمات ذخیره شد اما با این مقادیر پنل فعال نمی‌شود؛ فیلدهای لازم را کامل کنید یا ارسال را غیرفعال کنید تا از متغیرهای محیطی استفاده شود." };
   return { success: nowReady ? "تنظیمات ذخیره و ارسال واقعی پیامک فعال شد." : "تنظیمات ذخیره شد؛ سامانه در حالت محلی/محیطی قبلی می‌ماند." };
+}
+
+/** الحاقیهٔ ۲.۱۰.۶ — بررسی اتصال به پنل پیامکی بدون ارسال: استعلام اعتبار از
+ *  وب‌سرویس با همان تنظیمات فعال (دیتابیس یا محیط) تا مدیر از درستی کلید مطمئن شود. */
+export async function checkSmsPanelCreditAction(): Promise<ActionState> {
+  const user = await smsGuard("settings");
+  try {
+    const result = await getSmsPanelCredit();
+    await audit(user.id, "check_sms_panel_credit", "sms_settings", "default", `source=${result.source}`);
+    revalidatePath("/sms");
+    return { success: `اتصال به پنل برقرار است و کلید معتبر است — اعتبار حساب: ${result.credit} ریال (منبع تنظیمات: ${result.source === "database" ? "پنل مدیریت" : "متغیرهای محیطی"}).` };
+  } catch (error) {
+    return { error: `اتصال به پنل برقرار نشد — ${String((error as Error)?.message || error).slice(0, 300)}` };
+  }
 }
 
 // --- تست ارسال ---
