@@ -1,0 +1,39 @@
+import { redirect } from "next/navigation";
+import { Activity, ArrowDownToLine, BarChart3, CheckCircle2, Clock3, FileWarning, UsersRound } from "lucide-react";
+import { requireUser } from "@/lib/auth";
+import { ensureReferenceData } from "@/lib/data";
+import { can } from "@/lib/permissions";
+import { filterQuery, getReportData, parseReportFilters, type ReportInput } from "@/lib/report-data";
+import { faDate, faNumber } from "@/lib/format";
+import { roleLabels, sourceLabels, statusLabels } from "@/lib/constants";
+import { ReportFiltersForm } from "@/components/report-filters";
+
+function Bars({ rows, empty }: { rows:{name:string; total:number}[]; empty:string }) {
+  const maximum = Math.max(...rows.map((item)=>item.total), 1);
+  if (!rows.length) return <div className="report-empty">{empty}</div>;
+  return <div className="report-bars">{rows.map((row,index)=><div key={`${row.name}-${index}`}><div><span>{row.name}</span><strong>{faNumber(row.total)}</strong></div><i><b style={{width:`${Math.max(2,(row.total/maximum)*100)}%`}} /></i></div>)}</div>;
+}
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<ReportInput> }) {
+  const user = await requireUser(); if (!(await can(user, "reports.view"))) redirect("/dashboard"); await ensureReferenceData();
+  const input = await searchParams; const parsed = parseReportFilters(input);
+  const data = await getReportData(user, parsed.error ? {} : parsed.filters);
+  const provinces = user.effectiveRole === "super_admin" ? data.allProvinces : data.allProvinces.filter((p)=>p.id===user.provinceId);
+  const counties = user.effectiveRole === "super_admin" ? data.allCounties : data.allCounties.filter((c)=>c.provinceId===user.provinceId && (!user.countyId || c.id===user.countyId));
+  const q = filterQuery(parsed.filters); const suffix = q ? `&${q}` : ""; const status = (key:keyof typeof statusLabels)=>data.statusMap[key] || 0;
+  const summary = [
+    {label:"کل پرونده‌ها",value:data.total,icon:BarChart3,color:"mint"}, {label:"تأییدشده",value:status("approved"),icon:CheckCircle2,color:"gold"},
+    {label:"در انتظار بررسی",value:status("pending"),icon:Clock3,color:"blue"}, {label:"پرونده ناقص",value:data.incomplete,icon:FileWarning,color:"lavender"},
+    {label:"نیازمند اصلاح",value:status("needs_correction"),icon:FileWarning,color:"gold"}, {label:"ردشده",value:status("rejected"),icon:FileWarning,color:"lavender"},
+    {label:"کارشناسان فعال",value:data.activeExperts,icon:UsersRound,color:"mint"}, {label:"پرونده معوق",value:data.overdue,icon:Clock3,color:"blue"},
+  ];
+  return <><div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>گزارش‌ها و آمار</b></div><div className="ws-page-head"><div><div className="ws-eyebrow"><span /> داده‌های مدیریتی</div><h1>گزارش‌ها و آمار</h1><p>نمای تحلیلی پرونده‌ها در محدوده دسترسی شما</p></div>{!parsed.error && <div className="head-actions"><a className="secondary-button" href={`/api/reports/export?format=pdf${suffix}`}><ArrowDownToLine size={16} /> خروجی PDF</a><a className="primary-button" href={`/api/reports/export?format=xlsx${suffix}`}><ArrowDownToLine size={16} /> خروجی Excel</a></div>}</div>
+  <section className="ws-panel report-filter-panel"><div className="ws-panel-head"><div><span>گزارش اختصاصی</span><h2>فیلتر گزارش</h2><p>آمار و خروجی‌ها با فیلترهای انتخاب‌شده محاسبه می‌شوند.</p></div><span className="panel-outline-icon"><Activity size={18} /></span></div><ReportFiltersForm provinces={provinces} counties={counties} specialties={data.allSpecialties} filters={parsed.filters} />{parsed.error && <div className="form-error report-filter-error" role="alert">{parsed.error}</div>}</section>
+  {!parsed.error && <><div className="report-meta"><span>تاریخ تولید: {faDate(new Date(),true)}</span><span>{data.selectedLabels.length ? data.selectedLabels.join(" · ") : "بدون فیلتر افزوده؛ محدود به سطح دسترسی"}</span></div><div className="report-stats">{summary.map(({label,value,icon:Icon,color})=><div className="ws-stat" key={label}><span className={`ws-stat-icon ${color}`}><Icon size={20} /></span><div><small>{label}</small><strong>{faNumber(value)}</strong></div></div>)}</div>
+  <section className="ws-panel report-progress"><div><strong>پیشرفت بررسی نهایی</strong><p>نسبت پرونده‌های تأیید یا ردشده به پرونده‌های ارسال‌شده</p></div><span>{faNumber(data.completionRate)}٪</span><div className="report-progress-track"><i style={{width:`${data.completionRate}%`}} /></div></section>
+  <div className="report-grid"><section className="ws-panel detail-section"><div className="detail-section-head"><div><span>توزیع جغرافیایی</span><h2>پرونده‌ها به تفکیک استان</h2><p>بر اساس اطلاعات ثبت‌شده در محدوده مجاز</p></div><BarChart3 size={19}/></div><Bars rows={data.provinceStats.map(x=>({name:x.name || "ثبت‌نشده",total:x.total}))} empty="آماری برای نمایش وجود ندارد." /></section><section className="ws-panel detail-section"><div className="detail-section-head"><div><span>حوزه فعالیت</span><h2>تخصص‌های قرآنی</h2><p>هر فرد می‌تواند بیش از یک تخصص داشته باشد.</p></div><BarChart3 size={19}/></div><Bars rows={data.specialtyStats} empty="تخصصی برای نمایش وجود ندارد." /></section>
+  <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>توزیع محلی</span><h2>پرونده‌ها به تفکیک شهرستان</h2><p>حداکثر ۳۰ شهرستان با بیشترین تعداد</p></div><BarChart3 size={19}/></div><Bars rows={data.countyStats.map(x=>({name:`${x.name || "ثبت‌نشده"}${x.province ? ` · ${x.province}` : ""}`,total:x.total}))} empty="آماری برای نمایش وجود ندارد." /></section><section className="ws-panel detail-section"><div className="detail-section-head"><div><span>گردش پرونده</span><h2>وضعیت پرونده‌ها</h2><p>تعداد بر اساس وضعیت فعلی پرونده</p></div><BarChart3 size={19}/></div><Bars rows={Object.entries(data.statusMap).map(([name,total])=>({name:statusLabels[name as keyof typeof statusLabels],total:total || 0}))} empty="پرونده‌ای برای نمایش وجود ندارد." /></section>
+  <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>روند ثبت‌نام</span><h2>روند شش ماه شمسی</h2><p>شش ماه منتهی به پایان فیلتر یا ماه جاری</p></div><BarChart3 size={19}/></div><div className="trend-chart">{data.timeline.map((point)=>{const max=Math.max(...data.timeline.map(x=>x.total),1);return <div key={point.name}><strong>{faNumber(point.total)}</strong><span><i style={{height:`${Math.max(3,(point.total/max)*100)}%`}} /></span><small>{point.name.replace(/\d/g,d=>"۰۱۲۳۴۵۶۷۸۹"[Number(d)])}</small></div>;})}</div></section><section className="ws-panel detail-section"><div className="detail-section-head"><div><span>شیوه ورود اطلاعات</span><h2>منبع ثبت پرونده‌ها</h2><p>ثبت فرد، مدیر یا کارشناس</p></div><BarChart3 size={19}/></div><Bars rows={data.sources.map(x=>({name:sourceLabels[x.name],total:x.total}))} empty="پرونده‌ای برای نمایش وجود ندارد." /></section></div>
+  <section className="ws-panel detail-section report-performance"><div className="detail-section-head"><div><span>پایش فعالیت</span><h2>عملکرد کارشناسان</h2><p>تعداد رویدادهای بررسی در پرونده‌های انتخاب‌شده، بر اساس نقش فعلی کاربران</p></div><UsersRound size={19}/></div>{data.performance.length ? <div className="ws-table-scroll"><table className="ws-table"><thead><tr><th>کارشناس</th><th>نقش</th><th>رویدادهای ثبت‌شده</th></tr></thead><tbody>{data.performance.map((item,index)=><tr key={`${item.name}-${index}`}><td>{item.name}</td><td>{roleLabels[item.role]}</td><td>{faNumber(item.total)}</td></tr>)}</tbody></table></div> : <div className="report-empty">رویداد کارشناسی در این محدوده ثبت نشده است.</div>}</section>
+  <div className="report-explain"><strong>تعاریف گزارش:</strong> پرونده معوق، پرونده منتظر بررسی یا بررسی تخصصی است که بیش از ۱۴ روز از آخرین تغییر آن گذشته باشد. تعداد کارشناسان فعال فقط از محدوده جغرافیایی تأثیر می‌گیرد؛ سایر شاخص‌ها تابع همه فیلترها هستند.</div></>}
+  </>;
+}
