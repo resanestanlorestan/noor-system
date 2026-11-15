@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, activists, activityRecords, applications, certificates as certificatesTable, counties, educationRecords, educationalCourses, provinces, specialties, users, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activists, activityRecords, applications, certificates as certificatesTable, counties, documents, educationRecords, educationalCourses, provinces, specialties, users, workHistory } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth";
 import { isManager, scopeCondition } from "@/lib/data";
 import { normalizeDigits } from "@/lib/format";
@@ -125,7 +125,7 @@ export async function loadExportDetails(rows: ExportCaseRow[]) {
   const applicationIds = rows.map((row) => row.id);
   const nameByActivist = new Map(rows.map((row) => [row.activistId, `${row.firstName} ${row.lastName}`.trim()]));
   if (!activistIds.length) return { education: [], work: [], courses: [], activities: [], writings: [], certificates: [], documents: [], specialtyDetails: [], nameByActivist, applicationByActivist: new Map<string, string>() };
-  const [education, work, courses, activities, writings, certificates, documents, specialtyDetails] = await Promise.all([
+  const [education, work, courses, activities, writings, certificateRows, documentRows, specialtyDetails] = await Promise.all([
     db.select().from(educationRecords).where(inArray(educationRecords.activistId, activistIds)),
     db.select().from(workHistory).where(inArray(workHistory.activistId, activistIds)),
     db.select().from(educationalCourses).where(inArray(educationalCourses.activistId, activistIds)),
@@ -140,7 +140,7 @@ export async function loadExportDetails(rows: ExportCaseRow[]) {
       .where(inArray(activistSpecialties.activistId, activistIds)),
   ]);
   const applicationByActivist = new Map(rows.map((row) => [row.activistId, row.id]));
-  return { education, work, courses, activities, writings, certificates, documents, specialtyDetails, nameByActivist, applicationByActivist };
+  return { education, work, courses, activities, writings, certificates: certificateRows, documents: documentRows, specialtyDetails, nameByActivist, applicationByActivist };
 }
 
 export function caseFilterQuery(filters: CaseSearchFilters) {

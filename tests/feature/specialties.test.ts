@@ -167,7 +167,8 @@ describe("دوزیه رسمی", () => {
     if (!data) return;
     expect(data.specialtyTitles).toContain("حافظ قرآن");
     const memorizer = data.specialtyDetailLines.find((line) => line.title === "حافظ قرآن");
-    expect(memorizer?.detail).toBe("جزء ۱۵");
+    // الحاقیهٔ ۲.۱۲.۰ — برچسب جدید میزان حفظ («حفظ ۱۵ جزء» به‌جای «جزء ۱۵»)
+    expect(memorizer?.detail).toBe("حفظ ۱۵ جزء");
     const judge = data.specialtyDetailLines.find((line) => line.title === "داور و ممتحن قرآنی");
     expect(judge?.detail).toContain("تجوید");
     expect(judge?.detail).toContain("حفظ");
