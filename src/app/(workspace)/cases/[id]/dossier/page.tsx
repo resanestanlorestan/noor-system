@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadDossier } from "@/lib/dossier";
-import { faNumber } from "@/lib/format";
+import { faNumber, isoToJalali } from "@/lib/format";
 import { PrintButton } from "@/components/print-button";
 
 const dash = "—";
@@ -56,7 +56,7 @@ export default async function DossierPage({ params }: { params: Promise<{ id: st
           <IdentityField label="شماره شناسنامه" value={person.idCardNumber} />
           <IdentityField label="محل صدور" value={person.idIssuePlace} />
           <IdentityField label="شغل" value={person.job} />
-          <IdentityField label="تاریخ تولد (شمسی)" value={person.birthDate ? faDigits(String(person.birthDate)) : null} />
+          <IdentityField label="تاریخ تولد (شمسی)" value={person.birthDate ? faDigits(isoToJalali(String(person.birthDate))) : null} />
           <IdentityField label="جنسیت" value={person.gender === "male" ? "مرد" : person.gender === "female" ? "زن" : null} />
           <IdentityField label="شماره تماس" value={person.phone} />
           <IdentityField label="ایمیل" value={person.email} />

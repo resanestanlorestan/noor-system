@@ -2,11 +2,13 @@
 import { useActionState, useState } from "react";
 import { CalendarDays, LoaderCircle, Plus } from "lucide-react";
 import { initialActionState, type ActionState } from "@/lib/action-state";
+import { JalaliDateTimeInput } from "@/components/jalali-date-picker";
 
 type Province = { id: number; name: string };
 type County = { id: number; name: string; provinceId: number };
 
-/** Tehran-local value for <input type="datetime-local"> from a Date. */
+/** Tehran-local wire value («YYYY-MM-DDTHH:mm») produced by the Jalali
+ *  date-time picker's hidden field, from a Date. */
 export function tehranLocalInput(value: Date): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(value).replace(" ", "T");
 }
@@ -21,7 +23,7 @@ export function ActionForm({ action, children, className }: { action: (state: Ac
 export function EventCreateForm({ action, provinces, counties, geo }: { action: (state: ActionState, data: FormData) => Promise<ActionState>; provinces: Province[]; counties: County[]; geo: "national" | "province" | "county" }) {
   const [state, formAction, pending] = useActionState(action, initialActionState);
   const [province, setProvince] = useState("");
-  // Computed once at mount: <input type="datetime-local"> defaults to two days ahead, on the hour, Tehran-local.
+  // Computed once at mount: the Jalali date-time picker defaults to two days ahead, on the hour, Tehran-local.
   const [defaultStart] = useState(() => {
     const base = new Date(Date.now() + 2 * 86400000);
     base.setMinutes(0, 0, 0);
@@ -31,8 +33,8 @@ export function EventCreateForm({ action, provinces, counties, geo }: { action: 
     <div className="form-grid">
       <label className="full-field">عنوان رویداد<input name="title" required minLength={3} maxLength={160} placeholder="مثلاً هم‌اندیشی فعالان قرآنی استان" /></label>
       <label>نوع رویداد<select name="kind" defaultValue="meeting">{(["meeting", "workshop", "competition", "ceremony", "course"] as const).map((kind) => <option value={kind} key={kind}>{({ meeting: "جلسه هم‌اندیشی", workshop: "کارگاه آموزشی", competition: "مسابقه قرآنی", ceremony: "مراسم و افتخارآفرینی", course: "دوره آموزشی" })[kind]}</option>)}</select></label>
-      <label>شروع<input type="datetime-local" name="startsAt" required defaultValue={defaultStart} /></label>
-      <label>پایان (اختیاری)<input type="datetime-local" name="endsAt" /></label>
+      <label>شروع<JalaliDateTimeInput name="startsAt" required defaultValue={defaultStart} ariaLabel="تاریخ و ساعت شروع" /></label>
+      <label>پایان (اختیاری)<JalaliDateTimeInput name="endsAt" ariaLabel="تاریخ و ساعت پایان" /></label>
       <label>محل برگزاری<input name="location" maxLength={160} placeholder="مثلاً سالن اجلاس اداره کل" /></label>
       <label>ظرفیت (اختیاری)<input type="number" name="capacity" min={2} max={10000} placeholder="مثلاً ۸۰" /></label>
       <label>یادآور پیامکی<select name="reminderHours" defaultValue="48">{[24, 48, 72, 168].map((hours) => <option value={hours} key={hours}>{hours === 168 ? "یک هفته قبل" : `${new Intl.NumberFormat("fa-IR").format(hours)} ساعت قبل`}</option>)}</select></label>

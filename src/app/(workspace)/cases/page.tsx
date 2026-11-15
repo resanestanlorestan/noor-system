@@ -14,6 +14,7 @@ import { CaseStepsBar } from "@/components/case-progress";
 import { CaseTable } from "@/components/case-table";
 import { FlashNotice } from "@/components/flash-notice";
 import { popFlash } from "@/lib/flash";
+import { JalaliDateInput } from "@/components/jalali-date-picker";
 
 export default async function CasesPage({ searchParams }: { searchParams: Promise<CaseSearchInput & { page?: string; m?: string }> }) {
   const user = await requireUser(); const params = await searchParams; await ensureReferenceData();
@@ -60,8 +61,8 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
         {manager && <select name="expertId" defaultValue={f.expertId || ""} aria-label="کارشناس مسئول"><option value="">همه کارشناسان</option>{experts.map((item) => <option key={item.id} value={item.id}>{item.fullName}</option>)}</select>}
         {manager && <select name="source" defaultValue={f.source || ""} aria-label="منبع ثبت"><option value="">همه منابع</option>{Object.entries(sourceLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>}
         {manager && <input name="institution" defaultValue={f.institution} maxLength={120} placeholder="نام مؤسسه" aria-label="مؤسسه" />}
-        <input name="from" defaultValue={f.from} placeholder="از تاریخ ۱۴۰۳/۰۱/۰۱" aria-label="از تاریخ" inputMode="numeric" />
-        <input name="to" defaultValue={f.to} placeholder="تا تاریخ" aria-label="تا تاریخ" inputMode="numeric" />
+        <JalaliDateInput name="from" defaultValue={f.from} ariaLabel="از تاریخ" />
+        <JalaliDateInput name="to" defaultValue={f.to} ariaLabel="تا تاریخ" />
         <select name="sort" defaultValue={f.sort} aria-label="مرتب‌سازی">{Object.entries(sortLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
         {caseAdmin && <label className="filter-check"><input type="checkbox" name="deleted" value="1" defaultChecked={f.deleted} /> حذف‌شده‌ها</label>}
         <button className="secondary-button">اعمال فیلتر</button>{hasFilters && <Link href="/cases" className="clear-filter">پاک کردن</Link>}

@@ -3,6 +3,7 @@ import { useActionState, useState } from "react";
 import { LoaderCircle, Link2 } from "lucide-react";
 import { claimCaseAction } from "@/app/actions/claim";
 import { initialActionState } from "@/lib/action-state";
+import { JalaliDateInput } from "@/components/jalali-date-picker";
 export function ClaimCaseForm() {
   const [state, action, pending] = useActionState(claimCaseAction, initialActionState);
   const [firstName, setFirstName] = useState(""); const [lastName, setLastName] = useState("");
@@ -13,7 +14,7 @@ export function ClaimCaseForm() {
       <label>نام خانوادگی<input name="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} maxLength={100} required placeholder="همان نام خانوادگی ثبت‌شده" /></label>
       <label>کد ملی<input name="nationalId" value={nationalId} onChange={(e) => setNationalId(e.target.value)} inputMode="numeric" maxLength={10} required placeholder="کد ملی ۱۰ رقمی" /></label>
       <label>شماره همراه ثبت‌شده<input name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" maxLength={11} required placeholder="۰۹۱۲۱۲۳۴۵۶۷" /></label>
-      <label>تاریخ تولد شمسی<input name="birthDate" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required placeholder="۱۳۷۵/۰۱/۰۱" /></label>
+      <label>تاریخ تولد شمسی<JalaliDateInput name="birthDate" value={birthDate} onChange={setBirthDate} required ariaLabel="تاریخ تولد شمسی" /></label>
     </div>
     <small>تمام موارد باید دقیقاً با اطلاعاتی که مدیر یا کارشناس ثبت کرده یکسان باشد؛ در غیر این صورت اتصال انجام نمی‌شود.</small>
     {state.error && <div className="form-error" role="alert">{state.error}</div>}

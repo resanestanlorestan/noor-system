@@ -11,7 +11,11 @@ import Link from "next/link";
 import { AlertTriangle, Check, LoaderCircle, Plus, Save, Trash2 } from "lucide-react";
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
 import { initialActionState, type ActionState } from "@/lib/action-state";
+import { isoToJalali } from "@/lib/format";
 import { educationLevelOptions, educationTypeLabels, hafizJuzOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
+import { JalaliDateInput } from "@/components/jalali-date-picker";
+
+const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
 type Province = { id: number; name: string };
 type County = { id: number; name: string; provinceId: number };
@@ -91,7 +95,7 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
         <label>کد ملی <i>*</i><input required={!hasNationalId} {...bind("nationalId")} inputMode="numeric" maxLength={10} placeholder={hasNationalId ? "ثبت شده؛ برای تغییر وارد کنید" : "کد ملی ۱۰ رقمی"} /><small>کد ملی برای جست‌وجو محافظت و در فهرست‌ها پوشانده می‌شود.</small></label>
         <label>شماره شناسنامه <i>*</i><input required {...bind("idCardNumber")} inputMode="numeric" maxLength={10} placeholder="مثلاً ۱۲۳۴۵۶" /><small>شماره شناسنامه بدون صفرهای ابتدایی.</small></label>
         <label>محل صدور شناسنامه <i>*</i><input required {...bind("idIssuePlace")} maxLength={80} placeholder="مثلاً تهران" /></label>
-        <label>تاریخ تولد شمسی <i>*</i><input required {...bind("birthDate")} placeholder="۱۳۷۵/۰۱/۰۱" inputMode="numeric" /><small>به صورت سال/ماه/روز شمسی وارد شود.</small></label>
+        <label>تاریخ تولد شمسی <i>*</i><JalaliDateInput name="birthDate" required ariaLabel="تاریخ تولد شمسی" value={values.birthDate} onChange={(jalali) => setValues((current) => ({ ...current, birthDate: jalali }))} /><small>انتخاب تاریخ فقط از تقویم شمسی بازشونده.</small></label>
         <label>جنسیت <i>*</i><select name="gender" required data-selected-value={values.gender} value={values.gender} onChange={(event) => setValues((current) => ({ ...current, gender: event.target.value }))}><option value="">انتخاب کنید</option><option value="female">زن</option><option value="male">مرد</option></select></label>
         <label>شماره همراه <i>*</i><input required {...bind("phone")} inputMode="tel" maxLength={11} placeholder="۰۹۱۲۱۲۳۴۵۶۷" /></label>
         <label>شماره همراه جایگزین <i>*</i><input required {...bind("alternatePhone")} inputMode="tel" maxLength={11} placeholder="شماره همراه دوم" /></label>
@@ -231,13 +235,13 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
         <button type="button" className="secondary-button education-add" onClick={addEducationRow}><Plus size={16} /> افزودن مدرک تحصیلی</button>
       </div>
       <div className="writings-block">
-        {defaults.workHistory.length > 0 && <div className="education-existing"><h3 className="form-subhead">سوابق شغلی ثبت‌شده این پرونده</h3><ul>{defaults.workHistory.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.employer, item.position, item.startDate ? "از " + item.startDate : "", item.endDate ? "تا " + item.endDate : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
+        {defaults.workHistory.length > 0 && <div className="education-existing"><h3 className="form-subhead">سوابق شغلی ثبت‌شده این پرونده</h3><ul>{defaults.workHistory.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.employer, item.position, item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {workRows.length > 0 && <div className="education-rows">{workRows.map((row, index) => <div className="education-row" key={index}><div className="writing-row-grid">
           <label>عنوان یا محل اشتغال <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateWorkRow(index, { title: event.target.value })} placeholder="مثلاً دبیری آموزش و پرورش" /></label>
           <label>کارفرما یا سازمان<input value={row.employer} maxLength={180} onChange={(event) => updateWorkRow(index, { employer: event.target.value })} placeholder="اختیاری" /></label>
           <label>سمت<input value={row.position} maxLength={120} onChange={(event) => updateWorkRow(index, { position: event.target.value })} placeholder="اختیاری" /></label>
-          <label>تاریخ شروع شمسی<input value={row.startDate} maxLength={10} onChange={(event) => updateWorkRow(index, { startDate: event.target.value })} placeholder="۱۳۹۵/۰۱/۰۱" /></label>
-          <label>تاریخ پایان شمسی<input value={row.endDate} maxLength={10} onChange={(event) => updateWorkRow(index, { endDate: event.target.value })} placeholder="خالی = تاکنون" /></label>
+          <label>تاریخ شروع شمسی<JalaliDateInput ariaLabel="تاریخ شروع سابقهٔ شغلی" value={row.startDate} onChange={(jalali) => updateWorkRow(index, { startDate: jalali })} /></label>
+          <label>تاریخ پایان شمسی (خالی = تاکنون)<JalaliDateInput ariaLabel="تاریخ پایان سابقهٔ شغلی" value={row.endDate} onChange={(jalali) => updateWorkRow(index, { endDate: jalali })} /></label>
           <label>توضیحات<input value={row.description} maxLength={2000} onChange={(event) => updateWorkRow(index, { description: event.target.value })} placeholder="اختیاری" /></label>
         </div><button type="button" className="row-remove" onClick={() => removeWorkRow(index)} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
         <button type="button" className="secondary-button education-add" onClick={addWorkRow}><Plus size={16} /> افزودن سابقه شغلی</button>

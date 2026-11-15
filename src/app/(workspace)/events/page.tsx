@@ -10,6 +10,7 @@ import { scopeCondition } from "@/lib/data";
 import { faDate, faNumber } from "@/lib/format";
 import { maskPhone } from "@/lib/reminders";
 import { smsProviderLabel } from "@/lib/messaging";
+import { JalaliDateTimeInput } from "@/components/jalali-date-picker";
 import {
   PARTICIPANT_STATUSES, REMINDER_HOUR_OPTIONS, eventKindLabels,
   listEvents, listParticipants, participantStatusLabels, type EventRow,
@@ -148,7 +149,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 <input type="hidden" name="eventId" value={row.id} />
                 <div className="form-grid">
                   <label className="full-field">عنوان<input name="title" defaultValue={row.title} required minLength={3} maxLength={160} /></label>
-                  <label>شروع<input type="datetime-local" name="startsAt" defaultValue={tehranLocalInput(row.startsAt)} required /></label>
+                  <label>شروع<JalaliDateTimeInput name="startsAt" required defaultValue={tehranLocalInput(row.startsAt)} ariaLabel="تاریخ و ساعت شروع" /></label>
                   <label>محل برگزاری<input name="location" defaultValue={row.location || ""} maxLength={160} /></label>
                   <label>ظرفیت<input type="number" name="capacity" min={2} max={10000} defaultValue={row.capacity || ""} /></label>
                   <label>یادآور پیامکی<select name="reminderHours" defaultValue={String(row.reminderHours)}>{REMINDER_HOUR_OPTIONS.map((hours) => <option value={hours} key={hours}>{hours === 168 ? "یک هفته قبل" : `${faNumber(hours)} ساعت قبل`}</option>)}</select></label>
