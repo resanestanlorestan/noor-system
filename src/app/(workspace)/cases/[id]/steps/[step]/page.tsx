@@ -3,17 +3,19 @@ import { and, desc, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRight, CheckCircle2, Download, FileText, Pencil, Send, ShieldCheck, UserRound } from "lucide-react";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, counties, documentRequests, documents, educationRecords, provinces, specialties, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, counties, documentRequests, documents, educationRecords, educationalCourses, provinces, specialties, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getCaseForUser } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { faDate, faNumber, isoToJalali } from "@/lib/format";
-import { documentTypeLabels, educationTypeLabels, statusLabels, writingTypeLabels } from "@/lib/constants";
+import { activityRecordKindLabels, courseFieldOptions, documentTypeLabels, educationTypeLabels, statusLabels, writingTypeLabels } from "@/lib/constants";
 import { CASE_STEPS, computeCaseSteps, loadCaseStepFacts } from "@/lib/case-steps";
 import { CaseStepsBar } from "@/components/case-progress";
 import { IdentityStepForm, LocationStepForm, SpecialtiesStepForm } from "@/components/case-steps-forms";
 import { ConfirmButton, DocumentUpload, PhotoRemove, PhotoUpload } from "@/components/case-controls";
 import { prepareCaseAction, submitCaseAction } from "@/app/actions/cases";
+
+const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
 const EDITABLE_STATUSES = ["draft", "completing", "needs_correction"] as const;
 type EditableStatus = (typeof EDITABLE_STATUSES)[number];
@@ -56,15 +58,18 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
   }
 
   if (requested.key === "specialties") {
-    const [allSpecialties, selected, detailRows, writingRows, education, workRows] = await Promise.all([
+    const [allSpecialties, selected, detailRows, writingRows, education, workRows, courseRows, activityRows] = await Promise.all([
       db.select().from(specialties).orderBy(specialties.id),
       db.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, person.id)),
       db.select({ specialtyId: activistSpecialtyDetails.specialtyId, code: specialties.code, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).innerJoin(specialties, eq(activistSpecialtyDetails.specialtyId, specialties.id)).where(eq(activistSpecialtyDetails.activistId, person.id)),
       db.select().from(activistWritings).where(eq(activistWritings.activistId, person.id)).orderBy(activistWritings.createdAt),
       db.select().from(educationRecords).where(eq(educationRecords.activistId, person.id)),
       db.select().from(workHistory).where(eq(workHistory.activistId, person.id)),
+      // الحاقیهٔ ۲.۱۴.۰ — دوره‌ها و سوابق فعالیت ثبت‌شده برای نمایش در فهرست موجود
+      db.select().from(educationalCourses).where(eq(educationalCourses.activistId, person.id)).orderBy(educationalCourses.createdAt),
+      db.select().from(activityRecords).where(eq(activityRecords.activistId, person.id)).orderBy(activityRecords.createdAt),
     ]);
-    return <>{head}<section className="ws-panel form-panel"><SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), education: education.map((item) => ({ id: item.id, typeLabel: educationTypeLabels[item.type], level: item.level, field: item.field, centerName: item.centerName, certificate: item.certificate })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
+    return <>{head}<section className="ws-panel form-panel"><SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), education: education.map((item) => ({ id: item.id, typeLabel: educationTypeLabels[item.type], level: item.level, field: item.field, centerName: item.centerName, certificate: item.certificate })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
   }
 
   if (requested.key === "documents") {

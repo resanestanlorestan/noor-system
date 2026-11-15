@@ -12,9 +12,10 @@ import { AlertTriangle, Check, LoaderCircle, Plus, Save, Trash2 } from "lucide-r
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
 import { initialActionState, type ActionState } from "@/lib/action-state";
 import { isoToJalali } from "@/lib/format";
-import { educationLevelOptions, educationTypeLabels, cooperationTypeOptions, hafizJuzOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
+import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
 import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal";
+import { SectionUpload, type DocSlot } from "@/components/doc-upload";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
@@ -30,6 +31,12 @@ type IdentityValues = { firstName: string; lastName: string; fatherName: string;
 type LocationValues = { city: string; postalCode: string; address: string; activityPlace: string; organization: string };
 type DetailState = { value: string; options: string[] };
 type EducationRow = { type: string; level: string; field: string; centerName: string; certificate: string };
+type CourseRow = { title: string; provider: string; field: string; completedDate: string; hours: string };
+type ActivityRow = { kind: string; field: string; title: string; organization: string; position: string; startDate: string; endDate: string; description: string };
+const emptyCourseRow: CourseRow = { title: "", provider: "", field: "", completedDate: "", hours: "" };
+const emptyActivityRow: ActivityRow = { kind: "", field: "", title: "", organization: "", position: "", startDate: "", endDate: "", description: "" };
+export type StepExistingCourse = { id: string; title: string; provider: string | null; fieldLabel: string | null; completedDateLabel: string | null; hours: number | null };
+export type StepExistingActivity = { id: string; kindLabel: string; title: string; organization: string | null; position: string | null; fieldLabel: string | null; periodLabel: string | null; description: string | null };
 type WritingRow = { workType: string; title: string; topic: string };
 type WorkRow = { title: string; employer: string; cooperationType: string; position: string; startDate: string; endDate: string; description: string };
 const emptyEducationRow: EducationRow = { type: "", level: "", field: "", centerName: "", certificate: "" };
@@ -149,7 +156,7 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
 
 /* ------------------- مرحلهٔ ۳ — تخصص‌ها و سوابق ------------------- */
 
-export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; education: StepExistingEducation[]; workHistory: StepExistingWorkHistory[]; job?: string; notes?: string }; needsChangeReason?: boolean }) {
+export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; education: StepExistingEducation[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveSpecialtiesStepAction, initialActionState);
   const [selectedSpecialties, setSelectedSpecialties] = useState<Set<number>>(() => new Set(defaults.specialtyIds));
   const [specialtyDetailState, setSpecialtyDetailState] = useState<Record<number, DetailState>>(() => {
@@ -172,6 +179,16 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
   const [writingRows, setWritingRows] = useState<WritingRow[]>([]);
   const [educationRows, setEducationRows] = useState<EducationRow[]>([]);
   const [workRows, setWorkRows] = useState<WorkRow[]>([]);
+  // الحاقیهٔ ۲.۱۴.۰ — انتقال کامل امکانات فرم قبلی ثبت‌نام به ویزارد:
+  // دوره‌ها، سوابق فعالیت قرآنی، مدارک ردیفی، نوع مدرک حافظ و گواهی تخصص‌ها.
+  const [courseRows, setCourseRows] = useState<CourseRow[]>([]);
+  const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
+  const [educationSlots, setEducationSlots] = useState<Record<number, DocSlot[]>>({});
+  const [workSlots, setWorkSlots] = useState<Record<number, DocSlot[]>>({});
+  const [courseSlots, setCourseSlots] = useState<Record<number, DocSlot[]>>({});
+  const [memorizationCertType, setMemorizationCertType] = useState("");
+  const [memorizationSlot, setMemorizationSlot] = useState<DocSlot[]>([]);
+  const [certSlots, setCertSlots] = useState<Record<number, DocSlot[]>>({});
   const formRef = useRef<HTMLFormElement>(null);
   useSelectReset(formRef, state);
   const toggleSpecialty = (id: number) => setSelectedSpecialties((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -203,8 +220,13 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
   const addWorkRow = () => setWorkRows((current) => [...current, { ...emptyWorkRow }]);
   const updateWorkRow = (index: number, patch: Partial<WorkRow>) => setWorkRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   const removeWorkRow = (index: number) => setWorkRows((current) => current.filter((_, i) => i !== index));
-  // فقط ردیف‌های با انتخاب معتبر به سرور می‌روند (همان قاعدهٔ فرم قبلی).
-  const educationPayload = educationRows.filter((row) => row.type && row.level);
+  // الحاقیهٔ ۲.۱۴.۰ — ردیف‌های دوره و فعالیت قرآنی
+  const addCourseRow = () => setCourseRows((current) => [...current, { ...emptyCourseRow }]);
+  const updateCourseRow = (index: number, patch: Partial<CourseRow>) => setCourseRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  const removeCourseRow = (index: number) => setCourseRows((current) => current.filter((_, i) => i !== index));
+  const addActivityRow = () => setActivityRows((current) => [...current, { ...emptyActivityRow }]);
+  const updateActivityRow = (index: number, patch: Partial<ActivityRow>) => setActivityRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  const removeActivityRow = (index: number) => setActivityRows((current) => current.filter((_, i) => i !== index));
   const authorSpecialty = specialties.find((item) => item.code === "author");
   const authorSelected = Boolean(authorSpecialty && selectedSpecialties.has(authorSpecialty.id));
   const specialtyDetailsPayload = specialties
@@ -225,13 +247,33 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     })
     .filter((row) => row !== null);
   const writingsPayload = authorSelected ? writingRows.filter((row) => row.workType && row.title.trim().length >= 2) : [];
-  const workHistoryPayload = workRows.filter((row) => row.title.trim().length >= 2);
+  // الحاقیهٔ ۲.۱۴.۰ — کلید مدرک هر ردیف از بارگذار درون‌بخشی به payload می‌آید
+  const educationPayload = educationRows.map((row, index) => ({ ...row, docKey: educationSlots[index]?.[0]?.key || "" })).filter((row) => row.type && row.level);
+  const workHistoryPayload = workRows.map((row, index) => ({ ...row, docKey: workSlots[index]?.[0]?.key || "" })).filter((row) => row.title.trim().length >= 2);
+  const coursesPayload = courseRows.map((row, index) => ({ ...row, docKey: courseSlots[index]?.[0]?.key || "" })).filter((row) => row.title.trim().length >= 2);
+  const activitiesPayload = activityRows.filter((row) => row.title.trim().length >= 2 && row.kind);
+  const specialtyCertKeysPayload = specialties
+    .filter((item) => selectedSpecialties.has(item.id) && certSlots[item.id]?.[0])
+    .map((item) => ({ code: item.code, key: certSlots[item.id][0].key }));
+  const stagedDocsPayload: Array<DocSlot & { section: string }> = [
+    ...Object.entries(educationSlots).flatMap(([index, slots]) => slots.map((slot) => ({ ...slot, section: `education:${index}` }))),
+    ...Object.entries(workSlots).flatMap(([index, slots]) => slots.map((slot) => ({ ...slot, section: `work:${index}` }))),
+    ...Object.entries(courseSlots).flatMap(([index, slots]) => slots.map((slot) => ({ ...slot, section: `course:${index}` }))),
+    ...memorizationSlot.map((slot) => ({ ...slot, section: "memorization" })),
+    ...specialties.filter((item) => selectedSpecialties.has(item.id)).flatMap((item) => (certSlots[item.id] || []).map((slot) => ({ ...slot, section: `specialty:${item.code}` }))),
+  ];
   return <form ref={formRef} action={action} className="profile-form wizard-step-form" noValidate>
     <input type="hidden" name="caseId" value={caseId} />
     <input type="hidden" name="specialtyDetails" value={JSON.stringify(specialtyDetailsPayload)} />
     <input type="hidden" name="writings" value={JSON.stringify(writingsPayload)} />
     <input type="hidden" name="educationRecords" value={JSON.stringify(educationPayload)} />
     <input type="hidden" name="workHistory" value={JSON.stringify(workHistoryPayload)} />
+    {/* الحاقیهٔ ۲.۱۴.۰ — بخش‌های منتقل‌شده از فرم قبلی ثبت‌نام */}
+    <input type="hidden" name="courses" value={JSON.stringify(coursesPayload)} />
+    <input type="hidden" name="activityRecords" value={JSON.stringify(activitiesPayload)} />
+    <input type="hidden" name="stagedDocs" value={JSON.stringify(stagedDocsPayload)} />
+    <input type="hidden" name="specialtyCertKeys" value={JSON.stringify(specialtyCertKeysPayload)} />
+    <input type="hidden" name="memorizationCertType" value={memorizationCertType} />
     {state.error && <div className="form-error profile-error" role="alert">{state.error}</div>}
     <section className="form-section">
       <div className="form-section-head"><h2>تخصص‌های قرآنی</h2><p>برای تکمیل این مرحله، انتخاب حداقل یک تخصص الزامی است و جزئیات هر تخصص دارای جزئیات (میزان حفظ، سطح قرائت یا نقش‌ها) باید کامل شود.</p></div>
@@ -250,6 +292,13 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
             <button type="button" onClick={() => setJuzModal({ id: item.id, count: detail.value === "complete" ? 30 : Number(detail.value) })}>{juzParts[item.id]?.length ? "ویرایش اجزا" : "انتخاب اجزا"}</button>
           </div>}
           {spec.kind === "checklist" && spec.options && <div className="check-list">{Object.entries(spec.options).map(([key, label]) => <label key={key} className={detail.options.includes(key) ? "checked" : ""}><input type="checkbox" checked={detail.options.includes(key)} onChange={() => toggleDetailOption(item.id, key)} /><span>{label}</span></label>)}</div>}
+          {/* الحاقیهٔ ۲.۱۴.۰ — نوع مدرک حافظ + گواهی حفظ (انتقال از فرم قبلی ثبت‌نام) */}
+          {item.code === "memorizer" && <div className="memorizer-block">
+            <label>نوع مدرک حافظ<select value={memorizationCertType} onChange={(event) => setMemorizationCertType(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{Object.entries(memorizationCertTypeOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+            <SectionUpload section="memorization" slots={memorizationSlot} onChange={setMemorizationSlot} label="بارگذاری گواهی یا مدرک حفظ" />
+          </div>}
+          {/* الحاقیهٔ ۲.۱۴.۰ — گواهی بارگذاری‌شدهٔ هر تخصص (certDocumentId) */}
+          <SectionUpload section={`specialty:${item.code}`} slots={certSlots[item.id] || []} onChange={(next) => setCertSlots((current) => ({ ...current, [item.id]: next }))} label="بارگذاری گواهی تخصص" />
         </div>;
       })}
       {authorSpecialty && selectedSpecialties.has(authorSpecialty.id) && <div className="writings-block">
@@ -267,7 +316,10 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       </div>
       <div className="writings-block">
         {defaults.education.length > 0 && <div className="education-existing"><h3 className="form-subhead">تحصیلات ثبت‌شده این پرونده</h3><ul>{defaults.education.map((item) => <li key={item.id}><strong>{item.typeLabel} · {item.level}</strong><small>{[item.field, item.centerName, item.certificate].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
-        {educationRows.length > 0 && <div className="education-rows">{educationRows.map((row, index) => <div className="education-row" key={index}><div className="education-row-grid"><label>نوع تحصیل <i>*</i><select value={row.type} onChange={(event) => updateEducationRow(index, { type: event.target.value, level: "" })}><option value="">انتخاب کنید</option>{Object.entries(educationTypeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>مقطع <i>*</i><select value={row.level} disabled={!row.type} onChange={(event) => updateEducationRow(index, { level: event.target.value })}><option value="">{row.type ? "انتخاب کنید" : "ابتدا نوع را انتخاب کنید"}</option>{(educationLevelOptions[row.type as EducationType] || []).map((level) => <option key={level} value={level}>{level}</option>)}</select></label><label>رشته<input value={row.field} maxLength={120} onChange={(event) => updateEducationRow(index, { field: event.target.value })} placeholder="مثلاً علوم قرآنی" /></label><label>نام مرکز<input value={row.centerName} maxLength={180} onChange={(event) => updateEducationRow(index, { centerName: event.target.value })} placeholder="نام دانشگاه یا حوزه" /></label><label>مدرک<input value={row.certificate} maxLength={180} onChange={(event) => updateEducationRow(index, { certificate: event.target.value })} placeholder="مثلاً گواهی پایان سطح ۲" /></label></div><button type="button" className="row-remove" onClick={() => removeEducationRow(index)} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
+        {educationRows.length > 0 && <div className="education-rows">{educationRows.map((row, index) => <div className="education-row" key={index}><div className="education-row-grid"><label>نوع تحصیل <i>*</i><select value={row.type} onChange={(event) => updateEducationRow(index, { type: event.target.value, level: "" })}><option value="">انتخاب کنید</option>{Object.entries(educationTypeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>مقطع <i>*</i><select value={row.level} disabled={!row.type} onChange={(event) => updateEducationRow(index, { level: event.target.value })}><option value="">{row.type ? "انتخاب کنید" : "ابتدا نوع را انتخاب کنید"}</option>{(educationLevelOptions[row.type as EducationType] || []).map((level) => <option key={level} value={level}>{level}</option>)}</select></label><label>رشته<input value={row.field} maxLength={120} onChange={(event) => updateEducationRow(index, { field: event.target.value })} placeholder="مثلاً علوم قرآنی" /></label><label>نام مرکز<input value={row.centerName} maxLength={180} onChange={(event) => updateEducationRow(index, { centerName: event.target.value })} placeholder="نام دانشگاه یا حوزه" /></label><label>مدرک<input value={row.certificate} maxLength={180} onChange={(event) => updateEducationRow(index, { certificate: event.target.value })} placeholder="مثلاً گواهی پایان سطح ۲" /></label></div>
+          {/* الحاقیهٔ ۲.۱۴.۰ — بارگذاری مدرک همان ردیف تحصیلی */}
+          <SectionUpload section={`education:${index}`} slots={educationSlots[index] || []} onChange={(next) => setEducationSlots((current) => ({ ...current, [index]: next }))} label="بارگذاری مدرک این ردیف تحصیلی" />
+          <button type="button" className="row-remove" onClick={() => { removeEducationRow(index); setEducationSlots((current) => { const next = { ...current }; delete next[index]; return next; }); }} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
         <button type="button" className="secondary-button education-add" onClick={addEducationRow}><Plus size={16} /> افزودن مدرک تحصیلی</button>
       </div>
       <div className="writings-block">
@@ -280,8 +332,42 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
           <label>تاریخ شروع شمسی<JalaliDateInput ariaLabel="تاریخ شروع سابقهٔ شغلی" value={row.startDate} onChange={(jalali) => updateWorkRow(index, { startDate: jalali })} /></label>
           <label>تاریخ پایان شمسی (خالی = تاکنون)<JalaliDateInput ariaLabel="تاریخ پایان سابقهٔ شغلی" value={row.endDate} onChange={(jalali) => updateWorkRow(index, { endDate: jalali })} /></label>
           <label>توضیحات<input value={row.description} maxLength={2000} onChange={(event) => updateWorkRow(index, { description: event.target.value })} placeholder="اختیاری" /></label>
-        </div><button type="button" className="row-remove" onClick={() => removeWorkRow(index)} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
+        </div>
+          {/* الحاقیهٔ ۲.۱۴.۰ — بارگذاری مدرک همکاری همان ردیف */}
+          <SectionUpload section={`work:${index}`} slots={workSlots[index] || []} onChange={(next) => setWorkSlots((current) => ({ ...current, [index]: next }))} label="بارگذاری مدرک سابقه همکاری" />
+          <button type="button" className="row-remove" onClick={() => { removeWorkRow(index); setWorkSlots((current) => { const next = { ...current }; delete next[index]; return next; }); }} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
         <button type="button" className="secondary-button education-add" onClick={addWorkRow}><Plus size={16} /> افزودن سابقه شغلی</button>
+      </div>
+      {/* الحاقیهٔ ۲.۱۴.۰ — دوره‌های گذرانده‌شده (انتقال از فرم قبلی ثبت‌نام) */}
+      <div className="writings-block">
+        <h3 className="form-subhead">دوره‌های گذرانده‌شده</h3>
+        {defaults.courses.length > 0 && <div className="education-existing"><ul>{defaults.courses.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.provider, item.fieldLabel, item.completedDateLabel, item.hours ? `${item.hours} ساعت` : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
+        {courseRows.length > 0 && <div className="education-rows">{courseRows.map((row, index) => <div className="education-row" key={index}><div className="work-row-grid">
+          <label>نام دوره <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateCourseRow(index, { title: event.target.value })} placeholder="مثلاً دورهٔ روخوانی و روان‌خوانی" /></label>
+          <label>برگزارکننده<input value={row.provider} maxLength={180} onChange={(event) => updateCourseRow(index, { provider: event.target.value })} placeholder="اختیاری" /></label>
+          <label>رشتهٔ دوره<select value={row.field} onChange={(event) => updateCourseRow(index, { field: event.target.value })}><option value="">انتخاب کنید (اختیاری)</option>{Object.entries(courseFieldOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label>تاریخ اخذ شمسی<JalaliDateInput ariaLabel="تاریخ اخذ دوره" value={row.completedDate} onChange={(jalali) => updateCourseRow(index, { completedDate: jalali })} /></label>
+          <label>مدت (ساعت)<input value={row.hours} maxLength={4} inputMode="numeric" onChange={(event) => updateCourseRow(index, { hours: event.target.value.replace(/[^\d]/g, "") })} placeholder="مثلاً ۴۰" /></label>
+        </div>
+          <SectionUpload section={`course:${index}`} slots={courseSlots[index] || []} onChange={(next) => setCourseSlots((current) => ({ ...current, [index]: next }))} label="بارگذاری گواهی دوره" />
+          <button type="button" className="row-remove" onClick={() => { removeCourseRow(index); setCourseSlots((current) => { const next = { ...current }; delete next[index]; return next; }); }} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
+        <button type="button" className="secondary-button education-add" onClick={addCourseRow}><Plus size={16} /> افزودن دوره</button>
+      </div>
+      {/* الحاقیهٔ ۲.۱۴.۰ — سوابق فعالیت قرآنی (انتقال از فرم قبلی ثبت‌نام) */}
+      <div className="writings-block">
+        <h3 className="form-subhead">سوابق فعالیت قرآنی</h3>
+        {defaults.activities.length > 0 && <div className="education-existing"><ul>{defaults.activities.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.kindLabel, item.fieldLabel, item.organization, item.position, item.periodLabel].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
+        {activityRows.length > 0 && <div className="education-rows">{activityRows.map((row, index) => <div className="education-row" key={index}><div className="work-row-grid">
+          <label>نوع فعالیت <i>*</i><select value={row.kind} onChange={(event) => updateActivityRow(index, { kind: event.target.value, field: "" })}><option value="">انتخاب کنید</option>{Object.entries(activityRecordKindLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label>رشتهٔ فعالیت<select value={row.field} disabled={!["teaching", "judging"].includes(row.kind)} onChange={(event) => updateActivityRow(index, { field: event.target.value })}><option value="">{["teaching", "judging"].includes(row.kind) ? "انتخاب کنید (اختیاری)" : "فقط برای تدریس و داوری"}</option>{["teaching", "judging"].includes(row.kind) && Object.entries(courseFieldOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label>عنوان فعالیت <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateActivityRow(index, { title: event.target.value })} placeholder="مثلاً تدریس حفظ در مسجد جامع" /></label>
+          <label>مجموعه / محل فعالیت<input value={row.organization} maxLength={180} onChange={(event) => updateActivityRow(index, { organization: event.target.value })} placeholder="اختیاری" /></label>
+          <label>سمت<input value={row.position} maxLength={120} onChange={(event) => updateActivityRow(index, { position: event.target.value })} placeholder="اختیاری" /></label>
+          <label>تاریخ شروع شمسی<JalaliDateInput ariaLabel="تاریخ شروع فعالیت" value={row.startDate} onChange={(jalali) => updateActivityRow(index, { startDate: jalali })} /></label>
+          <label>تاریخ پایان شمسی (خالی = تاکنون)<JalaliDateInput ariaLabel="تاریخ پایان فعالیت" value={row.endDate} onChange={(jalali) => updateActivityRow(index, { endDate: jalali })} /></label>
+          <label>توضیحات<input value={row.description} maxLength={2000} onChange={(event) => updateActivityRow(index, { description: event.target.value })} placeholder="اختیاری" /></label>
+        </div><button type="button" className="row-remove" onClick={() => removeActivityRow(index)} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
+        <button type="button" className="secondary-button education-add" onClick={addActivityRow}><Plus size={16} /> افزودن سابقه فعالیت قرآنی</button>
       </div>
     </section>
     <ChangeReasonField required={Boolean(needsChangeReason)} />

@@ -9,14 +9,17 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, activists, applicationVersions, applications, auditLogs, counties, educationRecords, provinces, specialties, statusHistory, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, activists, applicationVersions, applications, auditLogs, counties, documents, educationRecords, educationalCourses, provinces, specialties, statusHistory, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getCaseForUser, isManager, scopeCondition } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { jalaliToIso, normalizeDigits, validIdCardNumber, validNationalId, validPostalCode } from "@/lib/format";
-import { specialtyDetailSpec } from "@/lib/constants";
+import { memorizationCertTypeOptions, specialtyDetailSpec } from "@/lib/constants";
 import { protectNationalId } from "@/lib/local-secrets";
-import { field, numeric, parseEducationInput, parseSpecialtyDetailsInput, parseWritingsInput, parseWorkHistoryInput } from "@/lib/case-input";
+import { field, numeric, parseActivityRecordsInput, parseCoursesInput, parseEducationInput, parseSpecialtyCertKeysInput, parseSpecialtyDetailsInput, parseStagedDocsInput, parseWritingsInput, parseWorkHistoryInput } from "@/lib/case-input";
+import { privateDir } from "@/lib/local-secrets";
+import { stat } from "node:fs/promises";
+import path from "node:path";
 import { CASE_STEPS, computeCaseSteps, loadCaseStepFacts, stepGateError, type CaseStepKey } from "@/lib/case-steps";
 import type { ActionState, DuplicateHint } from "@/lib/action-state";
 
@@ -282,6 +285,39 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
   try { workHistoryRows = parseWorkHistoryInput(data); } catch {
     return { error: "سوابق شغلی ارسالی معتبر نیست؛ عنوان و تاریخ هر ردیف را بررسی کنید." };
   }
+  // الحاقیهٔ ۲.۱۴.۰ — بخش‌های منتقل‌شده از فرم قبلی ثبت‌نام (دوره‌ها، فعالیت‌ها، مدارک ردیفی، گواهی حفظ و تخصص)
+  let courseRows: ReturnType<typeof parseCoursesInput>;
+  let activityRows: ReturnType<typeof parseActivityRecordsInput>;
+  let stagedDocs: ReturnType<typeof parseStagedDocsInput>;
+  let specialtyCertKeys: ReturnType<typeof parseSpecialtyCertKeysInput>;
+  try {
+    courseRows = parseCoursesInput(data);
+    activityRows = parseActivityRecordsInput(data);
+    stagedDocs = parseStagedDocsInput(data, /^(education:\d+|work:\d+|course:\d+|memorization|specialty:[a-z_]+)$/);
+    specialtyCertKeys = parseSpecialtyCertKeysInput(data, chosenCodes);
+  } catch {
+    return { error: "اطلاعات دوره‌ها، سوابق فعالیت یا مدارک بارگذاری‌شده معتبر نیست؛ ردیف‌ها و فایل‌ها را بررسی کنید." };
+  }
+  const memorizationCertTypeRaw = field(data, "memorizationCertType", 20);
+  const memorizationCertType = memorizationCertTypeRaw && memorizationCertTypeRaw in memorizationCertTypeOptions ? memorizationCertTypeRaw : null;
+  if (memorizationCertTypeRaw && !memorizationCertType) return { error: "نوع مدرک حافظ معتبر نیست." };
+  // پیوند مدارک ردیفی: هر docKey باید در فایل‌های staged همان بخش آمده باشد
+  const stagedKeys = new Set(stagedDocs.map((doc) => doc.key));
+  const rowDocKeys = [...educationRows, ...workHistoryRows, ...courseRows].map((row) => row.docKey).filter((key): key is string => Boolean(key));
+  if (rowDocKeys.some((key) => !stagedKeys.has(key))) return { error: "پیوند مدرک ردیف‌های تحصیلی/شغلی/دوره معتبر نیست؛ فایل را دوباره بارگذاری کنید." };
+  const certKeysInDocs = specialtyCertKeys.every((item) => stagedKeys.has(item.key));
+  if (!certKeysInDocs) return { error: "پیوند گواهی تخصص‌ها با فایل‌های بارگذاری‌شده هم‌خوانی ندارد." };
+  const memorizationDoc = stagedDocs.find((doc) => doc.section === "memorization");
+  const memorizerChosen = chosenCodes.has("memorizer");
+  if (memorizationDoc && !memorizerChosen) return { error: "گواهی حفظ برای تخصصی ارسال شده که انتخاب نشده است." };
+  // فایل‌های staged باید روی سرور موجود و هم‌اندازه باشند (جلوگیری از پیوند فایل خارجی)
+  for (const doc of stagedDocs) {
+    const target = path.join(privateDir, "uploads", doc.key);
+    try {
+      const info = await stat(target);
+      if (!info.isFile() || info.size !== doc.size) return { error: "یکی از فایل‌های بارگذاری‌شده یافت نشد؛ دوباره بارگذاری کنید." };
+    } catch { return { error: "یکی از فایل‌های بارگذاری‌شده یافت نشد؛ دوباره بارگذاری کنید." }; }
+  }
   try {
     await db.transaction(async (tx) => {
       const [locked] = await tx.select({ status: applications.status }).from(applications).where(eq(applications.id, row.application.id)).for("update");
@@ -298,14 +334,65 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
       await tx.delete(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id));
       await tx.insert(activistSpecialties).values(chosen.map((specialtyId) => ({ activistId: row.activist.id, specialtyId })));
       await tx.delete(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id));
+      // الحاقیهٔ ۲.۱۴.۰ — مدارک staged به پرونده متصل و نگاشت کلید ← شناسه ساخته می‌شود
+      const docIdByKey = new Map<string, string>();
+      for (const doc of stagedDocs) {
+        const educationRow = doc.section.startsWith("education:") ? educationRows.find((item) => item.docKey === doc.key) : null;
+        const docType = doc.section.startsWith("education:")
+          ? (educationRow?.type === "university" ? "university_degree" : educationRow?.type === "seminary" ? "seminary_certificate" : "degree")
+          : doc.section === "memorization" ? "memorization_certificate"
+          : doc.section.startsWith("specialty:") ? "specialty_certificate"
+          : doc.section.startsWith("work:") ? "work_cooperation_document"
+          : doc.section.startsWith("course:") ? "course_certificate"
+          : null;
+        const [inserted] = await tx.insert(documents).values({
+          applicationId: row.application.id,
+          storageKey: doc.key,
+          originalName: doc.name,
+          title: doc.section.startsWith("education:") ? (educationRow?.type === "seminary" ? "مدرک تحصیلی حوزوی" : "مدرک تحصیلی دانشگاهی")
+            : doc.section === "memorization" ? "گواهی حفظ قرآن"
+            : doc.section.startsWith("specialty:") ? "گواهی تخصص قرآنی"
+            : doc.section.startsWith("work:") ? "مدرک سابقه همکاری"
+            : doc.section.startsWith("course:") ? "گواهی پایان دوره"
+            : "مدرک پشتیبان",
+          docType,
+          kind: "evidence",
+          mimeType: doc.mime,
+          size: doc.size,
+          uploadedBy: user.id,
+        }).returning({ id: documents.id });
+        docIdByKey.set(doc.key, inserted.id);
+      }
       if (detailRows.length) {
         const codeToId = new Map(found.map((item) => [item.code, item.id]));
         // الحاقیهٔ ۲.۱۳.۰ — ذخیرهٔ اجزای دقیق حفظ در گام تخصص‌های ویزارد
-        await tx.insert(activistSpecialtyDetails).values(detailRows.map((item) => ({ activistId: row.activist.id, specialtyId: codeToId.get(item.code)!, detailValue: item.value, detailOptions: item.options, juzParts: item.juz })));
+        // الحاقیهٔ ۲.۱۴.۰ — گواهی بارگذاری‌شدهٔ هر تخصص (certDocumentId)
+        await tx.insert(activistSpecialtyDetails).values(detailRows.map((item) => ({
+          activistId: row.activist.id,
+          specialtyId: codeToId.get(item.code)!,
+          detailValue: item.value,
+          detailOptions: item.options,
+          juzParts: item.juz,
+          certDocumentId: specialtyCertKeys.find((entry) => entry.code === item.code) ? docIdByKey.get(specialtyCertKeys.find((entry) => entry.code === item.code)!.key) ?? null : null,
+        })));
       }
       if (writingRows.length) await tx.insert(activistWritings).values(writingRows.map((item) => ({ ...item, activistId: row.activist.id, createdBy: user.id })));
-      if (educationRows.length) await tx.insert(educationRecords).values(educationRows.map((item) => ({ ...item, activistId: row.activist.id, createdBy: user.id })));
-      if (workHistoryRows.length) await tx.insert(workHistory).values(workHistoryRows.map((item) => ({ ...item, activistId: row.activist.id, createdBy: user.id })));
+      if (educationRows.length) await tx.insert(educationRecords).values(educationRows.map((item) => ({ ...item, activistId: row.activist.id, documentId: item.docKey ? docIdByKey.get(item.docKey) ?? null : null, createdBy: user.id })));
+      if (workHistoryRows.length) await tx.insert(workHistory).values(workHistoryRows.map((item) => ({ ...item, activistId: row.activist.id, documentId: item.docKey ? docIdByKey.get(item.docKey) ?? null : null, createdBy: user.id })));
+      if (courseRows.length) await tx.insert(educationalCourses).values(courseRows.map((item) => ({ ...item, activistId: row.activist.id, documentId: item.docKey ? docIdByKey.get(item.docKey) ?? null : null, createdBy: user.id })));
+      if (activityRows.length) await tx.insert(activityRecords).values(activityRows.map((item) => ({ ...item, kind: item.kind as typeof activityRecords.$inferInsert.kind, activistId: row.activist.id, createdBy: user.id })));
+      // ستون‌های نمایش سریع activists — فقط وقتی دادهٔ تازه آمده تا اطلاعات قبلی بازنویسی نشود
+      const universityRow = educationRows.find((item) => item.type === "university");
+      const seminaryRow = educationRows.find((item) => item.type === "seminary");
+      await tx.update(activists).set({
+        job: field(data, "job", 120) || null,
+        notes: field(data, "notes", 4000) || null,
+        ...(memorizerChosen && memorizationCertType ? { memorizationCertType } : {}),
+        ...(universityRow ? { universityLevel: universityRow.level, universityDocumentId: universityRow.docKey ? docIdByKey.get(universityRow.docKey) ?? null : null } : {}),
+        ...(seminaryRow ? { seminaryLevel: seminaryRow.level, seminaryDocumentId: seminaryRow.docKey ? docIdByKey.get(seminaryRow.docKey) ?? null : null } : {}),
+        ...(memorizationDoc ? { memorizationDocumentId: docIdByKey.get(memorizationDoc.key) ?? null } : {}),
+        updatedAt: new Date(),
+      }).where(eq(activists.id, row.activist.id));
       const nextStatus = locked.status === "draft" ? "completing" : locked.status;
       if (nextStatus !== locked.status) {
         await tx.update(applications).set({ status: nextStatus, updatedAt: new Date() }).where(eq(applications.id, row.application.id));

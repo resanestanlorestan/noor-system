@@ -12,7 +12,7 @@ import { privateDir } from "@/lib/local-secrets";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SECTION_PATTERN = /^(photo|evidence|university|seminary|memorization|specialty:[a-z_]+|work:\d{1,2}|course:\d{1,2})$/;
+const SECTION_PATTERN = /^(photo|evidence|university|seminary|memorization|specialty:[a-z_]+|work:\d{1,2}|course:\d{1,2}|education:\d{1,2})$/; // الحاقیهٔ ۲.۱۴.۰ — بخش education برای مدرک ردیف‌های تحصیلی ویزارد
 const MAX_EVIDENCE_SIZE = 5 * 1024 * 1024;
 const MAX_PHOTO_SIZE = 500 * 1024;
 
