@@ -13,7 +13,7 @@ import { requireUser } from "@/lib/auth";
 import { completeness, getCaseForUser, isManager, missingRequired } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { isUuid, managerInScope } from "@/lib/workflow-utils";
-import { deliverOutbox, notifyUsers } from "@/lib/messaging";
+import { deliverOutbox, notifyUsers, queueSms } from "@/lib/messaging";
 import { resolveSmsTemplate } from "@/lib/sms-admin";
 import { normalizeText } from "@/lib/format";
 import { documentTypeLabels, type DocumentType } from "@/lib/constants";
@@ -129,6 +129,13 @@ export async function decisionAction(data: FormData) {
       : "";
     const notice = await resolveSmsTemplate(smsKey, { name: activistName, reason: reasonForSms, app: "سامانه نور" });
     await notifyUsers(tx, [row.activist.userId, row.application.createdBy].filter((recipient) => recipient !== user.id), title, body, id, notice ? { sms: notice.body, smsCategory: notice.category, smsTemplateKey: notice.key } : undefined);
+    // الحاقیهٔ ۲.۱۴.۲ — اگر فعالِ پرونده حساب کاربری با شمارهٔ همراه ندارد
+    // (پروندهٔ قدیمی یا ثبت‌شدهٔ کارشناسی)، پیامک نتیجهٔ بررسی مستقیم به شمارهٔ
+    // خودِ فعال (activists.phone) می‌رود تا هیچ پرونده‌ای بی‌خبر نماند.
+    if (notice && row.activist.phone) {
+      const [linked] = row.activist.userId ? await tx.select({ phone: users.phone }).from(users).where(eq(users.id, row.activist.userId)) : [];
+      if (!linked?.phone) await queueSms(tx, row.activist.phone, notice.body, { userId: row.activist.userId ?? null, applicationId: id, category: notice.category, templateKey: notice.key });
+    }
   });
   void deliverOutbox();
   revalidatePath("/dashboard"); revalidatePath("/cases"); messageRedirect(id, "نتیجه بررسی ثبت شد.");

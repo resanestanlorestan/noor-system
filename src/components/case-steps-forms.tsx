@@ -125,23 +125,26 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
         {sourceOptions && sourceOptions.length > 0 && <label>منبع ثبت اطلاعات<select name="source" data-selected-value={source} value={source} onChange={(event) => setSource(event.target.value)}>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>در صورت ورود اطلاعات از فرم کاغذی، گزینه فرم کاغذی را انتخاب کنید.</small></label>}
       </div>
     </section>
-    {/* الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی و حوزوی با بارگذاری مدرک در همان بخش */}
+    {/* الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی و حوزوی با بارگذاری مدرک در همان بخش
+        الحاقیهٔ ۲.۱۴.۲ — دو کارت کنار هم (در نمایش باریک زیر هم می‌شوند) */}
     <section className="form-section">
       <div className="form-section-head"><h2>تحصیلات</h2><p>مقطع تحصیلی دانشگاهی (از بی‌سواد تا دکترا) و وضعیت تحصیلات حوزوی (سطح ۱ تا سطح ۴) را انتخاب کنید و در صورت داشتن مدرک، آن را در همان بخش بارگذاری کنید. هر دو بخش اختیاری‌اند و اگر مقطعی انتخاب نشود، اطلاعات قبلی پرونده دست‌نخورده می‌ماند.</p></div>
-      <div className="writings-block">
-        <h3 className="form-subhead">تحصیلات دانشگاهی</h3>
-        <div className="memorizer-block">
-          <label>مقطع تحصیلی<select data-selected-value={universityLevel} value={universityLevel} onChange={(event) => setUniversityLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.university.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
-          <SectionUpload section="university" slots={universitySlot} onChange={setUniversitySlot} label="بارگذاری مدرک تحصیلی دانشگاهی" />
-          {defaults?.universityDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.universityDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
+      <div className="form-grid education-cards">
+        <div className="writings-block">
+          <h3 className="form-subhead">تحصیلات دانشگاهی</h3>
+          <div className="memorizer-block">
+            <label>مقطع تحصیلی<select data-selected-value={universityLevel} value={universityLevel} onChange={(event) => setUniversityLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.university.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
+            <SectionUpload section="university" slots={universitySlot} onChange={setUniversitySlot} label="بارگذاری مدرک تحصیلی دانشگاهی" />
+            {defaults?.universityDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.universityDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
+          </div>
         </div>
-      </div>
-      <div className="writings-block">
-        <h3 className="form-subhead">تحصیلات حوزوی</h3>
-        <div className="memorizer-block">
-          <label>سطح تحصیلات حوزوی<select data-selected-value={seminaryLevel} value={seminaryLevel} onChange={(event) => setSeminaryLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.seminary.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
-          <SectionUpload section="seminary" slots={seminarySlot} onChange={setSeminarySlot} label="بارگذاری مدرک تحصیلی حوزوی" />
-          {defaults?.seminaryDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.seminaryDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
+        <div className="writings-block">
+          <h3 className="form-subhead">تحصیلات حوزوی</h3>
+          <div className="memorizer-block">
+            <label>سطح تحصیلات حوزوی<select data-selected-value={seminaryLevel} value={seminaryLevel} onChange={(event) => setSeminaryLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.seminary.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
+            <SectionUpload section="seminary" slots={seminarySlot} onChange={setSeminarySlot} label="بارگذاری مدرک تحصیلی حوزوی" />
+            {defaults?.seminaryDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.seminaryDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
+          </div>
         </div>
       </div>
     </section>

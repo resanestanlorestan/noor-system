@@ -9,6 +9,7 @@ import { db } from "@/db";
 import * as s from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { featureSeed, loginAs, resetCaseData, closeDb, type Fixture } from "./helpers";
+import { protectNationalId } from "@/lib/local-secrets";
 import { GET as exportCases } from "@/app/api/cases/export/route";
 import { GET as exportReport } from "@/app/api/reports/export/route";
 
@@ -72,12 +73,41 @@ describe("ساخت کتاب اکسل فهرست پرونده‌ها", () => {
     expect(String(sheet.getCell("A1").value)).toContain("فهرست پرونده‌های سامانه");
     const headerRow = sheet.getRow(6).values as string[];
     expect(headerRow.slice(1)).toContain("نام خانوادگی");
-    expect(headerRow.slice(1)).toContain("کد ملی (۴ رقم)");
+    expect(headerRow.slice(1)).toContain("کد ملی");
     const dataRow = sheet.getRow(7).values as (string | number)[];
     expect(dataRow[2]).toBe("زهرا");
     expect(dataRow[3]).toBe("موسوی");
-    expect(dataRow[4]).toBe("••••••1234");
+    expect(dataRow[4]).toBe("••••••1234"); // بدون رمزنگاری — همان ۴ رقم آخر پوشانده می‌ماند
     expect(sheet.rowCount).toBe(7);
+  });
+
+  // الحاقیهٔ ۲.۱۴.۲ — کد ملی کامل برای مدیران + ستون مستقل رشته‌های معلمی/مدرسی
+  it("کد ملی کامل رمزگشایی‌شده و ستون رشته‌های معلمی و مدرسی در شیت اطلاعات کامل", async () => {
+    const sealed = await protectNationalId("0123456789");
+    const [activist] = await db.insert(s.activists).values({
+      firstName: "زهرا", lastName: "موسوی", gender: "female", phone: "09121110001",
+      nationalIdLast4: "6789", nationalIdCipher: sealed.cipher, provinceId: f.tehranProvinceId, countyId: f.tehranCountyId, city: "تهران",
+    }).returning();
+    const [application] = await db.insert(s.applications).values({
+      activistId: activist.id, status: "draft", source: "self", createdBy: f.users.act.id,
+    }).returning();
+    const [trainer] = await db.select().from(s.specialties).where(eq(s.specialties.code, "trainer")).limit(1);
+    await db.insert(s.activistSpecialties).values({ activistId: activist.id, specialtyId: trainer.id });
+    await db.insert(s.activistSpecialtyDetails).values({ activistId: activist.id, specialtyId: trainer.id, detailOptions: ["rokhani", "tajvid"], // کلیدهای گزینهٔ معلمی — نمایش با برچسب فارسی
+    });;
+    await loginAs("prov");
+    const workbook = await loadWorkbook(await exportCasesWorkbook());
+    const full = workbook.worksheets.find((sheet) => sheet.name === "اطلاعات کامل")!;
+    const header = full.getRow(2).values as string[]; // ردیف ۱ عنوان، ردیف ۲ سرستون‌ها
+    const headerCells = header.slice(1);
+    expect(headerCells).toContain("کد ملی");
+    expect(headerCells).toContain("رشته‌های معلمی و مدرسی");
+    const row = full.getRow(3).values as (string | number)[];
+    expect(row[5]).toBe("0123456789"); // کد ملی کامل برای مدیر (پس از نام پدر)
+    const teachIndex = headerCells.indexOf("رشته‌های معلمی و مدرسی") + 1;
+    expect(String(row[teachIndex])).toContain("معلم قرآن");
+    expect(String(row[teachIndex])).toContain("روخوانی و روان‌خوانی");
+    expect(String(row[teachIndex])).toContain("تجوید");
   });
 
   it("بدون پرونده در محدوده، کتاب خالی از سطر داده ساخته می‌شود", async () => {

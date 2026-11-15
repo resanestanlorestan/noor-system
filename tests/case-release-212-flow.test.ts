@@ -11,12 +11,13 @@ import path from "node:path";
 import "./feature/env";
 import { db } from "@/db";
 import * as s from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { redirectOf, featureSeed, resetCaseData, closeDb, form, nationalId, type Fixture } from "./feature/helpers";
 import { registerAction } from "@/app/actions/auth";
 import { createSession } from "@/lib/auth";
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
-import { privateDir } from "@/lib/local-secrets";
+import { privateDir, protectNationalId, decryptSecret } from "@/lib/local-secrets";
+import { decisionAction } from "@/app/actions/cases";
 
 let f: Fixture;
 
@@ -92,6 +93,8 @@ async function createCaseThroughWizard(identity: Record<string, string>, educati
   expect(caseId).toBeTruthy();
   await redirectOf(() => saveLocationStepAction({}, form({
     caseId, provinceId: String(f.tehranProvinceId), countyId: String(f.tehranCountyId),
+    // الحاقیهٔ ۲.۱۴.۲ — ویرایش سازمانی (مدیر) دلیل اصلاح می‌خواهد؛ برای فعال بی‌اثر است
+    changeReason: "ثبت پرونده آزمون",
     city: "تهران", postalCode: "", address: "نشانی آزمون",
     activityProvinceId: "", activityCountyId: "", activityPlace: "", organization: "",
   })));
@@ -274,5 +277,28 @@ describe("الحاقیهٔ ۲.۱۴.۰ — کد ملی تکراری و حذف ن�
       violated = cause.code === "23505" || cause.cause?.code === "23505";
     }
     expect(violated).toBe(true);
+  });
+
+  it("الحاقیهٔ ۲.۱۴.۲ — پیامک نتیجهٔ بررسی برای فعال بدون حساب کاربری به شمارهٔ خودش می‌رسد", async () => {
+    await loginDbUser(f.users.super);
+    const phone = nextMobile("0937");
+    const caseId = await createCaseThroughWizard({
+      firstName: "بی‌حساب", lastName: "پیامک‌آزمون", fatherName: "پدر",
+      nationalId: nationalId(`70003${runSuffix.slice(-3)}1`), phone,
+    });
+    // هدف آزمون مسیر پیامک تصمیم است؛ وضعیت بررسی مستقیم تنظیم می‌شود
+    await db.update(s.applications).set({ status: "pending" }).where(eq(s.applications.id, caseId));
+    await redirectOf(() => decisionAction(form({ caseId, decision: "correction", note: "گواهی دوره تجوید بارگذاری نشده است" })));
+    const smsRows = await db.select().from(s.messageOutbox).where(and(eq(s.messageOutbox.applicationId, caseId), eq(s.messageOutbox.channel, "sms")));
+    expect(smsRows.length).toBe(1);
+    expect(smsRows[0]!.recipient).toBe(phone);
+    expect(smsRows[0]!.templateKey).toBe("case_correction");
+    expect(smsRows[0]!.body).toContain("نیازمند اصلاح");
+  });
+
+  it("الحاقیهٔ ۲.۱۴.۲ — رمزگشایی کد ملی خروجی مدیران با هدف کلید درست انجام می‌شود", async () => {
+    const sealed = await protectNationalId("0123456789");
+    expect(await decryptSecret(sealed.cipher, "national-id-encryption-v1")).toBe("0123456789");
+    expect(await decryptSecret(sealed.cipher, "other-purpose")).toBeNull();
   });
 });

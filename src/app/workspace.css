@@ -920,3 +920,6 @@
 .juz-parts-line .juz-parts-value { background:var(--chip); color:var(--brand-text); border-radius:7px; padding:3px 9px; font-size:11px; font-weight:600; }
 .juz-parts-line button { border:1px solid var(--line); background:var(--surface-2); color:var(--brand-text); border-radius:7px; padding:3px 10px; cursor:pointer; font-family:inherit; font-size:11px; }
 .juz-parts-line button:hover { border-color:var(--line-strong); background:var(--tint); }
+/* الحاقیهٔ ۲.۱۴.۲ — کارت‌های تحصیلات دانشگاهی و حوزوی کنار هم (زیر ۶۴۰ پیکسل زیر هم) */
+.education-cards { margin:0 0 20px; }
+.education-cards .writings-block { margin:0; }

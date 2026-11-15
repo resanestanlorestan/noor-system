@@ -99,7 +99,9 @@ export async function searchCasesForExport(user: SessionUser, filters: CaseSearc
   const activityCounty = alias(counties, "activity_county");
   const rows = await db.select({
     id: applications.id, activistId: activists.id,
-    firstName: activists.firstName, lastName: activists.lastName, fatherName: activists.fatherName, nationalIdLast4: activists.nationalIdLast4, phone: activists.phone,
+    firstName: activists.firstName, lastName: activists.lastName, fatherName: activists.fatherName, nationalIdLast4: activists.nationalIdLast4,
+    // الحاقیهٔ ۲.۱۴.۲ — رمزنگاری کد ملی برای نمایش کامل در خروجی مدیران
+    nationalIdCipher: activists.nationalIdCipher, phone: activists.phone,
     alternatePhone: activists.alternatePhone, email: activists.email, idCardNumber: activists.idCardNumber, idIssuePlace: activists.idIssuePlace, postalCode: activists.postalCode,
     birthDate: activists.birthDate, gender: activists.gender, city: activists.city, address: activists.address,
     activityPlace: activists.activityPlace, organization: activists.organization, job: activists.job,
