@@ -104,6 +104,8 @@ const CASE_TABLES = [
   "activist_documents", "audit_logs", "expert_referrals", "expert_notes", "correction_requests", "appeals",
   "application_versions", "activist_organizations", "activity_records", "educational_courses",
   "education_records", "certificates", "document_requests", "notifications", "message_outbox",
+  // الحاقیهٔ ۲.۱۵.۰ — جدول‌های مدیریت API هم بین آزمون‌ها پاک می‌شوند
+  "api_request_logs", "api_webhooks", "api_integrations", "api_keys",
   "user_sessions", "login_attempts", "mfa_recovery_codes", "pending_mfa_sessions",
   "password_reset_tokens", "email_verification_tokens", "case_reminders", "message_broadcasts", "events",
 ];

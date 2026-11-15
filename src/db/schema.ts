@@ -4,7 +4,7 @@ import type { SmsCategory } from "@/lib/sms-templates";
 
 export const roleEnum = pgEnum("app_role", ["super_admin", "province_admin", "county_admin", "reviewer", "specialist", "activist"]);
 export const statusEnum = pgEnum("application_status", ["draft", "pending", "needs_correction", "approved", "rejected", "specialist_review", "initial", "completing", "ready"]);
-export const sourceEnum = pgEnum("application_source", ["self", "manager", "expert", "paper"]);
+export const sourceEnum = pgEnum("application_source", ["self", "manager", "expert", "paper", "api"]);
 
 export const provinces = pgTable("provinces", {
   id: serial("id").primaryKey(),
@@ -588,3 +588,82 @@ export const eventParticipants = pgTable("event_participants", {
 }, (table) => [uniqueIndex("event_participants_event_activist_unique").on(table.eventId, table.activistId), index("event_participants_event_idx").on(table.eventId), index("event_participants_activist_idx").on(table.activistId)]);
 
 
+
+
+// --- الحاقیهٔ ۲.۱۵.۰ — مدیریت API و اتصال به سامانه‌های خارجی ---
+
+/** کلیدهای API صادرشده برای سامانه‌های خارجی؛ مقدار کلید فقط رمزنگاری‌شده
+ *  ذخیره می‌شود و هش آن برای احراز Bearer استفاده می‌گردد. */
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull(),
+  keyPrefix: varchar("key_prefix", { length: 24 }).notNull(),
+  keyHash: varchar("key_hash", { length: 64 }).notNull().unique(),
+  keyCipher: text("key_cipher"),
+  scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  rateLimit: integer("rate_limit").notNull().default(60),
+  active: boolean("active").notNull().default(true),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** سامانه‌های خارجی برای ارسال خروجی (تست اتصال و وب‌هوک). توکن فقط رمزنگاری‌شده. */
+export const apiIntegrations = pgTable("api_integrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull(),
+  baseUrl: varchar("base_url", { length: 500 }).notNull(),
+  authType: varchar("auth_type", { length: 12 }).$type<"none" | "bearer" | "header">().notNull().default("none"),
+  authHeaderName: varchar("auth_header_name", { length: 80 }).notNull().default("X-API-Key"),
+  tokenCipher: text("token_cipher"),
+  headers: jsonb("headers").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+  active: boolean("active").notNull().default(true),
+  lastStatus: varchar("last_status", { length: 10 }),
+  lastLatencyMs: integer("last_latency_ms"),
+  lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** وب‌هوک‌ها: روی رویدادهای مشخص، بدنهٔ JSON به نشانی مقصد ارسال می‌شود. */
+export const apiWebhooks = pgTable("api_webhooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull(),
+  eventKey: varchar("event_key", { length: 60 }).notNull(),
+  integrationId: uuid("integration_id").references(() => apiIntegrations.id, { onDelete: "set null" }),
+  url: varchar("url", { length: 500 }).notNull(),
+  secretCipher: text("secret_cipher"),
+  active: boolean("active").notNull().default(true),
+  lastStatusCode: integer("last_status_code"),
+  lastDispatchAt: timestamp("last_dispatch_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** تاریخچهٔ همهٔ درخواست‌های ورودی و خروجی API برای مانیتورینگ و ارسال مجدد. */
+export const apiRequestLogs = pgTable("api_request_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  direction: varchar("direction", { length: 10 }).$type<"incoming" | "outgoing">().notNull(),
+  method: varchar("method", { length: 10 }).notNull(),
+  path: varchar("path", { length: 300 }).notNull(),
+  apiKeyId: uuid("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+  integrationId: uuid("integration_id").references(() => apiIntegrations.id, { onDelete: "set null" }),
+  webhookId: uuid("webhook_id").references(() => apiWebhooks.id, { onDelete: "set null" }),
+  statusCode: integer("status_code"),
+  ok: boolean("ok").notNull().default(true),
+  durationMs: integer("duration_ms").notNull().default(0),
+  payload: text("payload"),
+  responseSnippet: varchar("response_snippet", { length: 400 }),
+  error: varchar("error", { length: 400 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("api_request_logs_created_idx").on(table.createdAt)]);
+
+/** تنظیمات سراسری API (یک ردیف با شناسهٔ ثابت global). */
+export const apiSettings = pgTable("api_settings", {
+  id: varchar("id", { length: 20 }).primaryKey().default("global"),
+  incomingEnabled: boolean("incoming_enabled").notNull().default(true),
+  defaultRateLimit: integer("default_rate_limit").notNull().default(60),
+  ipAllowlist: varchar("ip_allowlist", { length: 300 }).notNull().default(""),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -69,7 +69,7 @@ describe("validIdCardNumber", () => {
 describe("phase-1 reference data", () => {
   it("exposes the paper-form source label", () => {
     expect(sourceLabels.paper).toBe("ورود از فرم کاغذی");
-    expect(Object.keys(sourceLabels)).toHaveLength(4);
+    expect(Object.keys(sourceLabels)).toHaveLength(5); // الحاقیهٔ ۲.۱۵.۰: منبع api
   });
   it("exposes the three base specialties of the requirement document", () => {
     const codes = referenceSpecialties.map((item) => item.code);

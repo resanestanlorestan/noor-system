@@ -5,7 +5,7 @@ export const roleLabels = {
 export type UserRole = keyof typeof roleLabels;
 export const statusLabels = { initial: "ثبت‌نام اولیه", draft: "پیش‌نویس", completing: "در حال تکمیل", ready: "آماده ارسال", pending: "در انتظار بررسی", needs_correction: "نیازمند اصلاح", specialist_review: "بررسی تخصصی", approved: "تأییدشده", rejected: "ردشده" } as const;
 export type AppStatus = keyof typeof statusLabels;
-export const sourceLabels = { self: "ثبت توسط فرد", manager: "ثبت توسط مدیر", expert: "ثبت توسط کارشناس", paper: "ورود از فرم کاغذی" } as const;
+export const sourceLabels = { self: "ثبت توسط فرد", manager: "ثبت توسط مدیر", expert: "ثبت توسط کارشناس", paper: "ورود از فرم کاغذی", api: "ثبت از طریق API" } as const;
 export const auditActionLabels: Record<string, string> = {
   login: "ورود به سامانه", login_failed: "تلاش ناموفق ورود", logout: "خروج از سامانه", register: "ثبت‌نام فعال قرآنی",
   bootstrap_admin: "راه‌اندازی مدیر اولیه", change_password: "تغییر گذرواژه", claim_case: "اتصال پرونده به حساب",

@@ -14,6 +14,7 @@ import { completeness, getCaseForUser, isManager, missingRequired } from "@/lib/
 import { can } from "@/lib/permissions";
 import { isUuid, managerInScope } from "@/lib/workflow-utils";
 import { deliverOutbox, notifyUsers, queueSms } from "@/lib/messaging";
+import { dispatchWebhookEvent } from "@/lib/api-outgoing";
 import { resolveSmsTemplate } from "@/lib/sms-admin";
 import { normalizeText } from "@/lib/format";
 import { documentTypeLabels, type DocumentType } from "@/lib/constants";
@@ -71,6 +72,8 @@ async function advanceCase(data: FormData, target: "ready" | "pending") {
     return null;
   });
   if (result) messageRedirect(id, result);
+  // الحاقیهٔ ۲.۱۵.۰ — وب‌هوک رویداد «ارسال برای بررسی» برای سامانه‌های خارجی
+  if (target === "pending") void dispatchWebhookEvent("case.submitted", { caseId: id, status: "pending" });
   void deliverOutbox();
   revalidatePath("/dashboard"); revalidatePath("/cases"); messageRedirect(id, target === "ready" ? "پرونده آماده ارسال است؛ برای بررسی آن را ارسال کنید." : "پرونده برای بررسی ارسال شد.");
 }
@@ -137,6 +140,8 @@ export async function decisionAction(data: FormData) {
       if (!linked?.phone) await queueSms(tx, row.activist.phone, notice.body, { userId: row.activist.userId ?? null, applicationId: id, category: notice.category, templateKey: notice.key });
     }
   });
+  // الحاقیهٔ ۲.۱۵.۰ — وب‌هوک رویداد «نتیجهٔ بررسی» برای سامانه‌های خارجی
+  void dispatchWebhookEvent("case.reviewed", { caseId: id, decision: next, ...(next === "needs_correction" && note ? { reason: note } : {}) });
   void deliverOutbox();
   revalidatePath("/dashboard"); revalidatePath("/cases"); messageRedirect(id, "نتیجه بررسی ثبت شد.");
 }
