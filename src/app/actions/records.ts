@@ -11,7 +11,7 @@ import { getCaseForUser } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { attachEntityDocument, detachEntityDocument, isDocumentLinkTarget } from "@/lib/entity-documents";
 import { jalaliToIso, normalizeText } from "@/lib/format";
-import { activityRecordKindLabels, educationLevelOptions, educationTypeLabels, writingTypeLabels, type ActivityRecordKind, type EducationType, type WritingType } from "@/lib/constants";
+import { activityRecordKindLabels, courseFieldOptions, cooperationTypeOptions, educationLevelOptions, educationTypeLabels, writingTypeLabels, type ActivityRecordKind, type EducationType, type WritingType } from "@/lib/constants";
 import { CASE_STEPS, computeCaseSteps, loadCaseStepFacts, stepGateError } from "@/lib/case-steps";
 import { isUuid } from "@/lib/workflow-utils";
 
@@ -54,11 +54,14 @@ export async function addActivityRecordAction(data: FormData) {
   const endRaw = field(data, "endDate", 20);
   if (!Object.hasOwn(activityRecordKindLabels, kind)) finish(id, "نوع سابقه معتبر نیست.");
   if (title.length < 2) finish(id, "عنوان سابقه را به‌درستی وارد کنید.");
+  // الحاقیهٔ ۲.۱۲.۰ — کشویی وابستهٔ رشته برای «تدریس» و «داوری»؛ کلید از courseFieldOptions
+  const selectedField = field(data, "field", 40);
+  if (selectedField && !(["teaching", "judging"].includes(kind) && selectedField in courseFieldOptions)) finish(id, "رشتهٔ انتخاب‌شده با نوع سابقه سازگار نیست.");
   const startDate = startRaw ? jalaliToIso(startRaw) : null;
   const endDate = endRaw ? jalaliToIso(endRaw) : null;
   if ((startRaw && !startDate) || (endRaw && !endDate)) finish(id, "تاریخ‌ها را به شکل شمسی معتبر وارد کنید.");
   if (startDate && endDate && startDate > endDate) finish(id, "تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.");
-  await db.insert(activityRecords).values({ activistId: row.activist.id, kind: kind as ActivityRecordKind, title, organization: organization || null, position: position || null, description: description || null, startDate, endDate, createdBy: user.id });
+  await db.insert(activityRecords).values({ activistId: row.activist.id, kind: kind as ActivityRecordKind, title, organization: organization || null, position: position || null, field: selectedField || null, description: description || null, startDate, endDate, createdBy: user.id });
   await db.insert(auditLogs).values({ actorId: user.id, action: "add_activity_record", targetType: "application", targetId: id });
   revalidatePath(`/cases/${id}`); finish(id, "سابقه فعالیت ثبت شد.");
 }
@@ -129,7 +132,10 @@ export async function addWorkHistoryAction(data: FormData) {
   if (documentId && !isUuid(documentId)) finish(id, "مدرک انتخاب‌شده معتبر نیست.");
   const linkedDocumentId = await resolveCaseDocument(id, documentId);
   if (documentId && !linkedDocumentId) finish(id, "مدرک انتخاب‌شده متعلق به این پرونده نیست.");
-  await db.insert(workHistory).values({ activistId: row.activist.id, title, employer: employer || null, position: position || null, description: description || null, startDate, endDate, documentId: linkedDocumentId, createdBy: user.id });
+  // الحاقیهٔ ۲.۱۲.۰ — نوع همکاری (تمام‌وقت، نیمه‌وقت، پروژه‌ای، داوطلبانه، سایر)
+  const cooperationType = field(data, "cooperationType", 40);
+  if (cooperationType && !(cooperationType in cooperationTypeOptions)) finish(id, "نوع همکاری معتبر نیست.");
+  await db.insert(workHistory).values({ activistId: row.activist.id, title, employer: employer || null, position: position || null, description: description || null, startDate, endDate, documentId: linkedDocumentId, cooperationType: cooperationType || null, createdBy: user.id });
   await db.insert(auditLogs).values({ actorId: user.id, action: "add_work_history", targetType: "application", targetId: id });
   revalidatePath(`/cases/${id}`); finish(id, "سابقه شغلی ثبت شد.");
 }
@@ -155,10 +161,17 @@ export async function addEducationalCourseAction(data: FormData) {
   const hoursRaw = field(data, "hours", 10);
   const certificateId = field(data, "certificateId", 40);
   if (title.length < 2) finish(id, "عنوان دوره را به‌درستی وارد کنید.");
+  // الحاقیهٔ ۲.۱۲.۰ — رشتهٔ دوره (فهرست وابستهٔ هشت‌گانه) و گواهی بارگذاری‌شدهٔ همان دوره
+  const courseField = field(data, "field", 40);
+  if (courseField && !(courseField in courseFieldOptions)) finish(id, "رشتهٔ دوره معتبر نیست.");
   const completedDate = completedRaw ? jalaliToIso(completedRaw) : null;
   if (completedRaw && !completedDate) finish(id, "تاریخ گذراندن دوره را به شکل شمسی معتبر وارد کنید.");
   const hours = hoursRaw && /^\d{1,4}$/.test(hoursRaw) ? Number(hoursRaw) : null;
   if (hoursRaw && hours === null) finish(id, "ساعت دوره باید عددی معتبر باشد.");
+  const courseDocumentId = field(data, "courseDocumentId", 40);
+  if (courseDocumentId && !isUuid(courseDocumentId)) finish(id, "مدرک انتخاب‌شده معتبر نیست.");
+  const linkedCourseDocumentId = await resolveCaseDocument(id, courseDocumentId);
+  if (courseDocumentId && !linkedCourseDocumentId) finish(id, "مدرک انتخاب‌شده متعلق به این پرونده نیست.");
   let linkedCertificateId: string | null = null;
   if (certificateId) {
     if (!isUuid(certificateId)) finish(id, "گواهینامه انتخاب‌شده معتبر نیست.");
@@ -166,7 +179,7 @@ export async function addEducationalCourseAction(data: FormData) {
     if (!certificate) finish(id, "گواهینامه انتخاب‌شده متعلق به این پرونده نیست.");
     linkedCertificateId = certificate.id;
   }
-  await db.insert(educationalCourses).values({ activistId: row.activist.id, title, provider: provider || null, completedDate, hours, certificateId: linkedCertificateId, createdBy: user.id });
+  await db.insert(educationalCourses).values({ activistId: row.activist.id, title, provider: provider || null, completedDate, hours, certificateId: linkedCertificateId, field: courseField || null, documentId: linkedCourseDocumentId, createdBy: user.id });
   await db.insert(auditLogs).values({ actorId: user.id, action: "add_educational_course", targetType: "application", targetId: id });
   revalidatePath(`/cases/${id}`); finish(id, "دوره آموزشی ثبت شد.");
 }

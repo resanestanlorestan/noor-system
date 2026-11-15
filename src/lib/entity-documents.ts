@@ -7,13 +7,15 @@
 // Feature از همین‌جا استفاده می‌کنند.
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { certificates, educationRecords, workHistory } from "@/db/schema";
+import { certificates, educationRecords, educationalCourses, workHistory } from "@/db/schema";
 
 /** موجودیت‌هایی که می‌توانند به یک مدرک متصل شوند. */
 export const documentLinkTargetLabels = {
   education_record: "سابقه تحصیلی",
   work_history: "سابقه شغلی",
   certificate: "گواهینامه / افتخار",
+  // الحاقیهٔ ۲.۱۲.۰ — گواهی دوره‌های گذرانده‌شده هم به‌عنوان موجودیت پیوندی
+  educational_course: "دوره گذرانده‌شده",
 } as const;
 
 export type DocumentLinkTarget = keyof typeof documentLinkTargetLabels;
@@ -39,6 +41,10 @@ async function setLink(
     const rows = await db.update(workHistory).set({ documentId }).where(and(eq(workHistory.id, recordId), eq(workHistory.activistId, activistId))).returning({ id: workHistory.id });
     return rows.length > 0;
   }
+  if (target === "educational_course") {
+    const rows = await db.update(educationalCourses).set({ documentId }).where(and(eq(educationalCourses.id, recordId), eq(educationalCourses.activistId, activistId))).returning({ id: educationalCourses.id });
+    return rows.length > 0;
+  }
   const rows = await db.update(certificates).set({ documentId }).where(and(eq(certificates.id, recordId), eq(certificates.activistId, activistId))).returning({ id: certificates.id });
   return rows.length > 0;
 }
@@ -60,6 +66,9 @@ async function loadOwnedRows(target: DocumentLinkTarget, activistId: string): Pr
   }
   if (target === "work_history") {
     return db.select({ id: workHistory.id, documentId: workHistory.documentId, title: workHistory.title }).from(workHistory).where(eq(workHistory.activistId, activistId));
+  }
+  if (target === "educational_course") {
+    return db.select({ id: educationalCourses.id, documentId: educationalCourses.documentId, title: educationalCourses.title }).from(educationalCourses).where(eq(educationalCourses.activistId, activistId));
   }
   return db.select({ id: certificates.id, documentId: certificates.documentId, title: certificates.title }).from(certificates).where(eq(certificates.activistId, activistId));
 }

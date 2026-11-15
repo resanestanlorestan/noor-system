@@ -157,8 +157,9 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
       db.select({ caseId: applications.id, status: applications.status, firstName: activists.firstName, lastName: activists.lastName, fatherMatch: activists.fatherName, hash: activists.nationalIdHash, birth: activists.birthDate, phoneMatch: activists.phone, province: provinces.name, county: counties.name })
         .from(activists).innerJoin(applications, eq(applications.activistId, activists.id))
         .leftJoin(provinces, eq(activists.provinceId, provinces.id)).leftJoin(counties, eq(activists.countyId, counties.id))
-        .where(or(...conditions)).limit(6),
-      protectedId ? db.select({ one: sql`1` }).from(activists).where(eq(activists.nationalIdHash, protectedId.hash)).limit(1) : Promise.resolve([] as { one: number }[]),
+        // الحاقیهٔ ۲.۱۲.۰ — پروندهٔ حذف‌شده از فهرست فعال، هشدار تکراری بودن نمی‌دهد
+        .where(and(or(...conditions), isNull(activists.deletedAt))).limit(6),
+      protectedId ? db.select({ one: sql`1` }).from(activists).where(and(eq(activists.nationalIdHash, protectedId.hash), isNull(activists.deletedAt))).limit(1) : Promise.resolve([] as { one: number }[]),
     ]);
     for (const row of rows) {
       const reasons: string[] = [];

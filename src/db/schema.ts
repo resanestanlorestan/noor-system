@@ -120,7 +120,10 @@ export const activists = pgTable("quranic_activists", {
   lastName: varchar("last_name", { length: 100 }).notNull(),
   fatherName: varchar("father_name", { length: 80 }),
   nationalIdCipher: text("national_id_cipher"),
-  nationalIdHash: varchar("national_id_hash", { length: 64 }).unique(),
+  // الحاقیهٔ ۲.۱۲.۰ — یکتایی کد ملی فقط میان پرونده‌های فعال اعمال می‌شود؛
+  // قید UNIQUE ساده به ایندکس یکتای جزئی روی ردیف‌های حذف‌نشده تبدیل شده است
+  // تا پس از «حذف از فهرست فعال»، ثبت‌نام مجدد با همان کد ملی ممکن باشد.
+  nationalIdHash: varchar("national_id_hash", { length: 64 }),
   nationalIdLast4: varchar("national_id_last4", { length: 4 }),
   birthDate: date("birth_date"),
   gender: varchar("gender", { length: 20 }),
@@ -146,9 +149,29 @@ export const activists = pgTable("quranic_activists", {
   teachingHistory: text("teaching_history"),
   achievements: text("achievements"),
   notes: text("notes"),
+  // الحاقیهٔ ۲.۱۲.۰ — تحصیلات درون‌بخشی: مقطع دانشگاهی (بی‌سواد تا دکترا) و
+  // مقطع حوزوی (سطح ۱ تا ۴) به‌همراه مدرک بارگذاری‌شده هر بخش؛ مقادیر کامل‌تر
+  // در education_records هم نگه داشته می‌شود.
+  universityLevel: varchar("university_level", { length: 60 }),
+  universityDocumentId: uuid("university_document_id"),
+  seminaryLevel: varchar("seminary_level", { length: 60 }),
+  seminaryDocumentId: uuid("seminary_document_id"),
+  // الحاقیهٔ ۲.۱۲.۰ — نوع مدرک حافظ (specialized/general/none) و گواهی بارگذاری‌شده
+  memorizationCertType: varchar("memorization_cert_type", { length: 20 }),
+  memorizationDocumentId: uuid("memorization_document_id"),
+  // الحاقیهٔ ۲.۱۲.۰ — حذف نرم رکورد فعال (هم‌گام با applications.deletedAt):
+  // تاریخ‌گذاری یعنی پرونده از فهرست فعال خارج شده و کد ملی آن برای ثبت‌نام
+  // مجدد آزاد است؛ رکورد در بانک برای ممیزی می‌ماند.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by").references((): AnyPgColumn => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [index("activists_scope_idx").on(table.provinceId, table.countyId), index("activists_name_idx").on(table.lastName, table.firstName)]);
+}, (table) => [
+  index("activists_scope_idx").on(table.provinceId, table.countyId),
+  index("activists_name_idx").on(table.lastName, table.firstName),
+  // یکتای جزئی کد ملی — فقط ردیف‌های فعال (بدون حذف) با کد ملی ثبت‌شده
+  uniqueIndex("activists_national_id_active_unique").on(table.nationalIdHash).where(sql`${table.deletedAt} is null and ${table.nationalIdHash} is not null`),
+]);
 export const activistSpecialties = pgTable("activist_specialties", {
   activistId: uuid("activist_id").notNull().references(() => activists.id),
   specialtyId: integer("specialty_id").notNull().references(() => specialties.id),
@@ -164,6 +187,8 @@ export const activistSpecialtyDetails = pgTable("activist_specialty_details", {
   specialtyId: integer("specialty_id").notNull().references(() => specialties.id),
   detailValue: varchar("detail_value", { length: 40 }),
   detailOptions: jsonb("detail_options").$type<string[]>(),
+  // الحاقیهٔ ۲.۱۲.۰ — گواهی تخصص: فایل بارگذاری‌شده برای همین تخصص
+  certDocumentId: uuid("cert_document_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("activist_specialty_details_unique").on(table.activistId, table.specialtyId)]);
@@ -325,6 +350,8 @@ export const activityRecords = pgTable("activity_records", {
   description: text("description"),
   startDate: date("start_date"),
   endDate: date("end_date"),
+  // الحاقیهٔ ۲.۱۲.۰ — رشتهٔ وابسته به نوع سابقه (تدریس/داوری): کلید از courseFieldOptions
+  field: varchar("field", { length: 40 }),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("activity_records_activist_idx").on(table.activistId)]);
@@ -337,6 +364,9 @@ export const educationalCourses = pgTable("educational_courses", {
   completedDate: date("completed_date"),
   hours: integer("hours"),
   certificateId: uuid("certificate_id"),
+  // الحاقیهٔ ۲.۱۲.۰ — رشتهٔ دوره (courseFieldOptions) و گواهی بارگذاری‌شدهٔ همان دوره
+  field: varchar("field", { length: 40 }),
+  documentId: uuid("document_id").references(() => documents.id),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("educational_courses_activist_idx").on(table.activistId)]);
@@ -383,6 +413,8 @@ export const workHistory = pgTable("work_history", {
   endDate: date("end_date"),
   description: text("description"),
   documentId: uuid("document_id").references(() => documents.id),
+  // الحاقیهٔ ۲.۱۲.۰ — نوع همکاری (cooperationTypeOptions: تمام‌وقت، نیمه‌وقت، …)
+  cooperationType: varchar("cooperation_type", { length: 40 }),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("work_history_activist_idx").on(table.activistId)]);

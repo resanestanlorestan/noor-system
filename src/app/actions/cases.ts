@@ -119,7 +119,16 @@ export async function decisionAction(data: FormData) {
     await tx.insert(auditLogs).values({ actorId: user.id, action: next, targetType: "application", targetId: id });
     const title = next === "needs_correction" ? "درخواست اصلاح پرونده" : next === "approved" ? "پرونده تأیید شد" : "نتیجه بررسی پرونده";
     const body = next === "needs_correction" ? "موارد نیازمند اصلاح در پرونده ثبت شده است." : next === "approved" ? "پرونده شما تأیید شده است." : "نتیجه بررسی و دلیل آن در پرونده ثبت شده است.";
-    await notifyUsers(tx, [row.activist.userId, row.application.createdBy].filter((recipient) => recipient !== user.id), title, body, id);
+    // الحاقیهٔ ۲.۱۲.۰ — پیامک نتیجهٔ بررسی به فعال: تأیید، نیازمند اصلاح (با
+    // توضیح کارشناس و فهرست مدارک درخواستی) و رد. متن از قالب قابل‌ویرایش پنل
+    // پیامک می‌آید و هر پیام با دسته و کلید قالب در صندوق ثبت می‌شود.
+    const activistName = [row.activist.firstName, row.activist.lastName].filter(Boolean).join(" ").trim() || "فعال قرآنی";
+    const smsKey = next === "approved" ? "case_approved" : next === "needs_correction" ? "case_correction" : "case_rejected";
+    const reasonForSms = next === "needs_correction"
+      ? [note, ...missingDocs].filter(Boolean).join("؛ ").slice(0, 160)
+      : "";
+    const notice = await resolveSmsTemplate(smsKey, { name: activistName, reason: reasonForSms, app: "سامانه نور" });
+    await notifyUsers(tx, [row.activist.userId, row.application.createdBy].filter((recipient) => recipient !== user.id), title, body, id, notice ? { sms: notice.body, smsCategory: notice.category, smsTemplateKey: notice.key } : undefined);
   });
   void deliverOutbox();
   revalidatePath("/dashboard"); revalidatePath("/cases"); messageRedirect(id, "نتیجه بررسی ثبت شد.");
@@ -297,8 +306,14 @@ export async function deleteCaseAction(data: FormData) {
     bank(`پرونده «${name}» و تمام داده‌های وابسته به‌طور کامل حذف شد؛ فقط ردپای ممیزی باقی مانده است.`);
   }
   if (row.deletedAt) bank("این پرونده پیش‌تر از فهرست فعال حذف شده است.");
-  await db.update(applications).set({ deletedAt: new Date(), updatedAt: new Date() }).where(and(eq(applications.id, id), isNull(applications.deletedAt)));
-  await db.insert(auditLogs).values({ actorId: user.id, action: "delete_case_bank", targetType: "application", targetId: id, detail: name });
+  // الحاقیهٔ ۲.۱۲.۰ — حذف نرم هم‌زمان روی application و رکورد فعال؛ با غیرفعال
+  // شدن رکورد فعال، ایندکس یکتای جزئی کد ملی (فقط ردیف‌های فعال) آزاد می‌شود و
+  // ثبت‌نام مجدد با همان کد ملی بدون خطای «کد ملی تکراری» انجام می‌شود.
+  await db.transaction(async (tx) => {
+    await tx.update(applications).set({ deletedAt: new Date(), updatedAt: new Date() }).where(and(eq(applications.id, id), isNull(applications.deletedAt)));
+    await tx.update(activists).set({ deletedAt: new Date(), deletedBy: user.id, updatedAt: new Date() }).where(and(eq(activists.id, row.activistId), isNull(activists.deletedAt)));
+    await tx.insert(auditLogs).values({ actorId: user.id, action: "delete_case_bank", targetType: "application", targetId: id, detail: name });
+  });
   revalidatePath("/dashboard"); revalidatePath("/cases");
   bank(`پرونده «${name}» از فهرست فعال حذف شد و در بانک باقی ماند؛ از فیلتر «حذف‌شده‌ها» قابل بازیابی است.`);
 }
@@ -308,13 +323,26 @@ export async function restoreCaseAction(data: FormData) {
   const bank = (message: string) => redirect(`/cases?m=${stashFlash(message)}`);
   if (user.effectiveRole !== "super_admin") bank("بازیابی پرونده فقط توسط مدیر کل سامانه مجاز است.");
   if (!isUuid(id)) bank("پرونده معتبر نیست.");
-  const [row] = await db.select({ deletedAt: applications.deletedAt, firstName: activists.firstName, lastName: activists.lastName })
+  const [row] = await db.select({ deletedAt: applications.deletedAt, activistId: applications.activistId, firstName: activists.firstName, lastName: activists.lastName, nationalIdHash: activists.nationalIdHash, activistDeletedAt: activists.deletedAt })
     .from(applications).innerJoin(activists, eq(applications.activistId, activists.id)).where(eq(applications.id, id)).limit(1);
   if (!row) bank("پرونده پیدا نشد.");
   if (!row.deletedAt) bank("این پرونده در فهرست فعال است و نیازی به بازیابی ندارد.");
+  // الحاقیهٔ ۲.۱۲.۰ — پیش از بازیابی، تداخل کد ملی با یک پروندهٔ فعال دیگر
+  // کنترل می‌شود؛ اگر همان کد ملی اکنون در پروندهٔ فعال دیگری ثبت شده باشد،
+  // بازیابی مسدود است تا قید یکتایی پرونده‌های فعال نقض نشود.
+  if (row.nationalIdHash && row.activistDeletedAt) {
+    const [conflict] = await db.select({ id: activists.id })
+      .from(activists)
+      .where(and(eq(activists.nationalIdHash, row.nationalIdHash), isNull(activists.deletedAt)))
+      .limit(1);
+    if (conflict && conflict.id !== row.activistId) bank("بازیابی ممکن نیست؛ کد ملی این پرونده اکنون در پروندهٔ فعال دیگری ثبت شده است.");
+  }
   const name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim() || "بدون نام";
-  await db.update(applications).set({ deletedAt: null, updatedAt: new Date() }).where(and(eq(applications.id, id), isNotNull(applications.deletedAt)));
-  await db.insert(auditLogs).values({ actorId: user.id, action: "restore_case", targetType: "application", targetId: id, detail: name });
+  await db.transaction(async (tx) => {
+    await tx.update(applications).set({ deletedAt: null, updatedAt: new Date() }).where(and(eq(applications.id, id), isNotNull(applications.deletedAt)));
+    await tx.update(activists).set({ deletedAt: null, deletedBy: null, updatedAt: new Date() }).where(and(eq(activists.id, row.activistId), isNotNull(activists.deletedAt)));
+    await tx.insert(auditLogs).values({ actorId: user.id, action: "restore_case", targetType: "application", targetId: id, detail: name });
+  });
   revalidatePath("/dashboard"); revalidatePath("/cases");
   bank(`پرونده «${name}» بازیابی شد و به فهرست فعال بانک پرونده‌ها برگشت.`);
 }

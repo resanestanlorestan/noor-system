@@ -34,7 +34,7 @@ export async function claimCaseAction(_state: ActionState, data: FormData): Prom
   const hash = (await protectNationalId(nationalId)).hash;
   const [candidate] = await db.select({ activist: activists, applicationId: applications.id, createdBy: applications.createdBy, assignedExpertId: applications.assignedExpertId }).from(activists)
     .innerJoin(applications, eq(applications.activistId, activists.id))
-    .where(and(eq(activists.nationalIdHash, hash), isNull(activists.userId), eq(activists.phone, phone), eq(activists.birthDate, birthDate), isNull(applications.deletedAt), ne(applications.source, "self")))
+    .where(and(eq(activists.nationalIdHash, hash), isNull(activists.userId), isNull(activists.deletedAt), eq(activists.phone, phone), eq(activists.birthDate, birthDate), isNull(applications.deletedAt), ne(applications.source, "self")))
     .limit(1);
 
   const matches = candidate && normalizeText(candidate.activist.firstName).toLowerCase() === firstName.toLowerCase() && normalizeText(candidate.activist.lastName).toLowerCase() === lastName.toLowerCase();

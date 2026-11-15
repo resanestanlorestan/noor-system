@@ -1,13 +1,29 @@
 import ExcelJS from "exceljs";
 import { audit, getCurrentUser } from "@/lib/auth";
 import { isManager } from "@/lib/data";
-import { parseCaseFilters, searchCasesForExport, sortLabels } from "@/lib/case-search";
-import { faDate } from "@/lib/format";
-import { sourceLabels, statusLabels } from "@/lib/constants";
+import { loadExportDetails, parseCaseFilters, searchCasesForExport, sortLabels } from "@/lib/case-search";
+import { isoToJalali, faDate } from "@/lib/format";
+import { courseFieldOptions, cooperationTypeOptions, documentTypeLabels, educationTypeLabels, formatSpecialtyDetail, memorizationCertTypeOptions, sourceLabels, statusLabels, activityRecordKindLabels } from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const clean = (value: string) => /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+const value = (input: string | number | null | undefined) => input === null || input === undefined || input === "" ? "—" : clean(String(input));
+const jalali = (iso: string | null) => iso ? isoToJalali(iso).replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]) : "—";
+const faOption = (map: Record<string, string>, key: string | null | undefined) => key && key in map ? map[key] : null;
+
+/** ساخت یک شیت با ردیف عنوان، سرستون بولد و تراز راست‌به‌چپ. */
+function addSheet(workbook: ExcelJS.Workbook, name: string, title: string, header: string[], widths: number[], rows: Array<Array<string | number>>) {
+  const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 2, rightToLeft: true }] });
+  sheet.addRow([title]);
+  const head = sheet.addRow(header);
+  head.font = { bold: true, color: { argb: "FF145943" } };
+  head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF4ED" } };
+  sheet.columns = widths.map((width) => ({ width }));
+  rows.forEach((row) => sheet.addRow(row));
+  sheet.eachRow((row) => { row.alignment = { horizontal: "right", vertical: "middle", readingOrder: "rtl", wrapText: true }; });
+  return sheet;
+}
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -23,6 +39,7 @@ export async function GET(request: Request) {
   if (parsed.error) return Response.json({ error: parsed.error }, { status: 400 });
   try {
     const { rows, truncated } = await searchCasesForExport(user, parsed.filters);
+    const details = await loadExportDetails(rows);
     const workbook = new ExcelJS.Workbook(); workbook.creator = "سامانه نور"; workbook.created = new Date();
     const sheet = workbook.addWorksheet("فهرست پرونده‌ها", { views: [{ state: "frozen", ySplit: 5, rightToLeft: true }] });
     sheet.addRow(["فهرست پرونده‌های سامانه جامع فعالان قرآنی"]);
@@ -40,8 +57,66 @@ export async function GET(request: Request) {
       sheet.addRow([index + 1, clean(row.firstName), clean(row.lastName), row.nationalIdLast4 ? `••••••${row.nationalIdLast4}` : "—", row.idCardNumber || "—", row.idIssuePlace || "—", row.phone || "—", row.postalCode || "—", row.province || "—", row.county || "—", row.activityProvince || "—", row.activityCounty || "—", row.specialty || "—", statusLabels[row.status], sourceLabels[row.source], faDate(row.createdAt)]);
     });
     sheet.eachRow((row) => { row.alignment = { horizontal: "right", vertical: "middle", readingOrder: "rtl", wrapText: true }; });
+
+    /* ---------------- الحاقیهٔ ۲.۱۲.۰ — شیت «اطلاعات کامل پرونده‌ها» ---------------- */
+    addSheet(workbook, "اطلاعات کامل", "اطلاعات کامل هر پرونده — همهٔ فیلدهای ثبت‌شده",
+      ["ردیف", "نام", "نام خانوادگی", "نام پدر", "کد ملی (۴ رقم)", "شماره شناسنامه", "محل صدور", "تاریخ تولد", "جنسیت", "شماره تماس", "همراه جایگزین", "ایمیل", "استان سکونت", "شهرستان", "شهر", "کد پستی", "نشانی", "استان فعالیت", "شهرستان فعالیت", "محل فعالیت", "مؤسسه قرآنی", "شغل", "تحصیلات دانشگاهی", "تحصیلات حوزوی", "میزان حفظ", "نوع مدرک حفظ", "تخصص‌ها و جزئیات", "سوابق همکاری", "دوره‌های گذرانده‌شده", "فعالیت‌های قرآنی", "آثار مؤلف", "گواهینامه‌ها", "تعداد مدارک بارگذاری‌شده", "وضعیت بررسی پرونده", "منبع ثبت", "تاریخ ثبت", "تاریخ ارسال برای بررسی"],
+      Array(37).fill(14),
+      rows.map((row, index) => {
+        const educationFor = details.education.filter((item) => item.activistId === row.activistId);
+        const universityText = educationFor.filter((item) => item.type === "university").map((item) => [item.level, item.field, item.centerName, item.certificate].filter(Boolean).join(" — ")).join(" | ") || (row.universityLevel || "");
+        const seminaryText = educationFor.filter((item) => item.type === "seminary").map((item) => [item.level, item.field, item.centerName, item.certificate].filter(Boolean).join(" — ")).join(" | ") || (row.seminaryLevel || "");
+        const specialtyFull = details.specialtyDetails.filter((item) => item.activistId === row.activistId)
+          .map((item) => {
+            const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions);
+            return detail ? `${item.title}: ${detail}` : item.title;
+          }).join(" | ");
+        const memorizationText = details.specialtyDetails.find((item) => item.activistId === row.activistId && item.code === "memorizer");
+        const workText = details.work.filter((item) => item.activistId === row.activistId).map((item) => [item.title, item.employer, faOption(cooperationTypeOptions, item.cooperationType), item.position, item.startDate ? `${isoToJalali(item.startDate)} تا ${item.endDate ? isoToJalali(item.endDate) : "اکنون"}` : null].filter(Boolean).join(" — ")).join(" | ");
+        const courseText = details.courses.filter((item) => item.activistId === row.activistId).map((item) => [item.title, item.provider, faOption(courseFieldOptions, item.field), item.completedDate ? isoToJalali(item.completedDate) : null, item.hours ? `${item.hours} ساعت` : null].filter(Boolean).join(" — ")).join(" | ");
+        const activityText = details.activities.filter((item) => item.activistId === row.activistId).map((item) => [activityRecordKindLabels[item.kind], item.title, faOption(courseFieldOptions, item.field), item.organization, item.position].filter(Boolean).join(" — ")).join(" | ");
+        const writingsText = details.writings.filter((item) => item.activistId === row.activistId).map((item) => `${item.workType === "book" ? "کتاب" : "مقاله"}: ${item.title}${item.topic ? ` (${item.topic})` : ""}`).join(" | ");
+        const certificateText = details.certificates.filter((item) => item.activistId === row.activistId).map((item) => [item.title, item.issuer, item.issuedDate ? isoToJalali(item.issuedDate) : null].filter(Boolean).join(" — ")).join(" | ");
+        const documentCount = details.documents.filter((item) => item.applicationId === row.id).length;
+        return [
+          index + 1, clean(row.firstName), clean(row.lastName), value(row.fatherName), row.nationalIdLast4 ? `••••••${row.nationalIdLast4}` : "—",
+          value(row.idCardNumber), value(row.idIssuePlace), jalali(row.birthDate), row.gender === "female" ? "زن" : row.gender === "male" ? "مرد" : "—",
+          value(row.phone), value(row.alternatePhone), value(row.email), value(row.province), value(row.county), value(row.city), value(row.postalCode), value(row.address),
+          value(row.activityProvince), value(row.activityCounty), value(row.activityPlace), value(row.organization), value(row.job),
+          value(universityText), value(seminaryText),
+          value(memorizationText ? formatSpecialtyDetail("memorizer", memorizationText.detailValue, memorizationText.detailOptions) : null),
+          value(faOption(memorizationCertTypeOptions, row.memorizationCertType)),
+          value(specialtyFull),
+          value(workText), value(courseText), value(activityText), value(writingsText), value(certificateText),
+          documentCount, statusLabels[row.status], sourceLabels[row.source], faDate(row.createdAt), row.submittedAt ? faDate(row.submittedAt) : "—",
+        ];
+      }));
+
+    /* ---------------- شیت‌های تفصیلی: یک ردیف به‌ازای هر رکورد ---------------- */
+    addSheet(workbook, "تحصیلات", "همهٔ سوابق تحصیلی حوزوی و دانشگاهی ثبت‌شده",
+      ["فعال قرآنی", "نوع تحصیل", "مقطع", "رشته", "نام مرکز", "مدرک یا گواهی"], [24, 12, 14, 16, 20, 20],
+      details.education.map((item) => [value(details.nameByActivist.get(item.activistId)), educationTypeLabels[item.type], item.level, value(item.field), value(item.centerName), value(item.certificate)]));
+    addSheet(workbook, "سوابق همکاری", "همهٔ سوابق همکاری و شغلی ثبت‌شده",
+      ["فعال قرآنی", "عنوان", "سازمان یا مجموعه", "نوع همکاری", "سمت", "تاریخ شروع", "تاریخ پایان", "توضیحات"], [24, 20, 20, 12, 16, 13, 13, 24],
+      details.work.map((item) => [value(details.nameByActivist.get(item.activistId)), item.title, value(item.employer), value(faOption(cooperationTypeOptions, item.cooperationType)), value(item.position), jalali(item.startDate), jalali(item.endDate), value(item.description)]));
+    addSheet(workbook, "دوره‌ها", "همهٔ دوره‌های گذرانده‌شده ثبت‌شده",
+      ["فعال قرآنی", "عنوان دوره", "برگزارکننده", "رشته", "تاریخ گذراندن", "ساعت"], [24, 22, 18, 14, 13, 8],
+      details.courses.map((item) => [value(details.nameByActivist.get(item.activistId)), item.title, value(item.provider), value(faOption(courseFieldOptions, item.field)), jalali(item.completedDate), item.hours ?? "—"]));
+    addSheet(workbook, "فعالیت‌های قرآنی", "همهٔ سوابق فعالیت، تدریس، داوری، مسابقات و پژوهش",
+      ["فعال قرآنی", "نوع سابقه", "رشته", "عنوان", "سازمان", "سمت", "بازه زمانی"], [24, 14, 14, 22, 18, 16, 20],
+      details.activities.map((item) => [value(details.nameByActivist.get(item.activistId)), activityRecordKindLabels[item.kind], value(faOption(courseFieldOptions, item.field)), item.title, value(item.organization), value(item.position), item.startDate ? `${isoToJalali(item.startDate)} تا ${item.endDate ? isoToJalali(item.endDate) : "اکنون"}` : "—"]));
+    addSheet(workbook, "آثار و گواهینامه‌ها", "آثار مؤلف و گواهینامه‌های ثبت‌شده",
+      ["فعال قرآنی", "نوع", "عنوان", "موضوع / صادرکننده", "تاریخ"], [24, 10, 26, 24, 13],
+      [
+        ...details.writings.map((item) => [value(details.nameByActivist.get(item.activistId)), item.workType === "book" ? "کتاب" : "مقاله", item.title, value(item.topic), "—"] as Array<string | number>),
+        ...details.certificates.map((item) => [value(details.nameByActivist.get(item.activistId)), "گواهینامه", item.title, value(item.issuer), jalali(item.issuedDate)] as Array<string | number>),
+      ]);
+    addSheet(workbook, "مدارک بارگذاری‌شده", "همهٔ فایل‌های بارگذاری‌شده در بخش‌های مربوط",
+      ["فعال قرآنی", "عنوان مدرک", "نوع مدرک", "نام فایل", "حجم (کیلوبایت)", "تاریخ بارگذاری"], [24, 22, 18, 26, 14, 18],
+      details.documents.map((item) => [value(details.nameByActivist.get(item.activistId)), item.title, value(faOption(documentTypeLabels, item.docType)), item.originalName, Math.ceil(item.size / 1024), faDate(item.createdAt)]));
+
     const buffer = await workbook.xlsx.writeBuffer();
-    await audit(user.id, "export_case_list", "report", undefined, `${rows.length} rows`);
+    await audit(user.id, "export_case_list", "report", undefined, `${rows.length} rows + full sheets`);
     return new Response(new Uint8Array(buffer), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="noor-cases.xlsx"', "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   } catch { return Response.json({ error: "تولید خروجی انجام نشد." }, { status: 500 }); }
 }

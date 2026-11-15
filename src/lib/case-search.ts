@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { activistSpecialties, activists, applications, counties, provinces, specialties, users } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activists, activityRecords, applications, certificates as certificatesTable, counties, educationRecords, educationalCourses, provinces, specialties, users, workHistory } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth";
 import { isManager, scopeCondition } from "@/lib/data";
 import { normalizeDigits } from "@/lib/format";
@@ -54,7 +54,9 @@ export async function buildCaseWhere(user: SessionUser, filters: CaseSearchFilte
   const conditions: SQL[] = [scopeCondition(user)];
   // الحاقیهٔ ۲.۱۰.۴ — پرونده‌های حذف‌شده از همهٔ فهرست‌ها، گزارش‌ها و خروجی‌ها
   // کنار می‌روند؛ فقط فیلتر صریح «deleted=1» آن‌ها را نشان می‌دهد.
+  // الحاقیهٔ ۲.۱۲.۰ — حذف نرم هم‌زمان روی رکورد فعال هم اعمال می‌شود.
   conditions.push(filters.deleted ? isNotNull(applications.deletedAt) : isNull(applications.deletedAt));
+  if (!filters.deleted) conditions.push(isNull(activists.deletedAt));
   if (filters.q) {
     const input = normalizeDigits(filters.q);
     const matching = [ilike(activists.firstName, `%${filters.q}%`), ilike(activists.lastName, `%${filters.q}%`), ilike(activists.phone, `%${input}%`)];
@@ -96,9 +98,13 @@ export async function searchCasesForExport(user: SessionUser, filters: CaseSearc
   const activityProvince = alias(provinces, "activity_province");
   const activityCounty = alias(counties, "activity_county");
   const rows = await db.select({
-    firstName: activists.firstName, lastName: activists.lastName, nationalIdLast4: activists.nationalIdLast4, phone: activists.phone,
-    idCardNumber: activists.idCardNumber, idIssuePlace: activists.idIssuePlace, postalCode: activists.postalCode,
-    status: applications.status, source: applications.source, createdAt: applications.createdAt, province: provinces.name, county: counties.name,
+    id: applications.id, activistId: activists.id,
+    firstName: activists.firstName, lastName: activists.lastName, fatherName: activists.fatherName, nationalIdLast4: activists.nationalIdLast4, phone: activists.phone,
+    alternatePhone: activists.alternatePhone, email: activists.email, idCardNumber: activists.idCardNumber, idIssuePlace: activists.idIssuePlace, postalCode: activists.postalCode,
+    birthDate: activists.birthDate, gender: activists.gender, city: activists.city, address: activists.address,
+    activityPlace: activists.activityPlace, organization: activists.organization, job: activists.job,
+    universityLevel: activists.universityLevel, seminaryLevel: activists.seminaryLevel, memorizationCertType: activists.memorizationCertType,
+    status: applications.status, source: applications.source, createdAt: applications.createdAt, submittedAt: applications.submittedAt, province: provinces.name, county: counties.name,
     activityProvince: activityProvince.name, activityCounty: activityCounty.name,
     specialty: sql<string | null>`(select string_agg(${specialties.title}, '، ') from ${activistSpecialties} inner join ${specialties} on ${specialties.id} = ${activistSpecialties.specialtyId} where ${activistSpecialties.activistId} = ${activists.id})`,
   }).from(applications).innerJoin(activists, eq(applications.activistId, activists.id))
@@ -106,6 +112,35 @@ export async function searchCasesForExport(user: SessionUser, filters: CaseSearc
     .leftJoin(activityProvince, eq(activists.activityProvinceId, activityProvince.id)).leftJoin(activityCounty, eq(activists.activityCountyId, activityCounty.id))
     .where(where).orderBy(...orderFor(filters.sort)).limit(MAX_EXPORT_ROWS + 1);
   return { rows: rows.slice(0, MAX_EXPORT_ROWS), truncated: rows.length > MAX_EXPORT_ROWS };
+}
+
+// الحاقیهٔ ۲.۱۲.۰ — بارگیر دادهٔ تفصیلی خروجی اکسل کامل: همهٔ رکوردهای وابستهٔ
+// پرونده‌های انتخابی (تحصیلات، سوابق همکاری، دوره‌ها، فعالیت‌ها، آثار، گواهی‌ها
+// و مدارک بارگذاری‌شده) در یک رفت‌وبرگشت با inArray خوانده می‌شود تا هیچ
+// اطلاعاتی از خروجی جا نماند.
+export type ExportCaseRow = Awaited<ReturnType<typeof searchCasesForExport>>["rows"][number];
+
+export async function loadExportDetails(rows: ExportCaseRow[]) {
+  const activistIds = rows.map((row) => row.activistId);
+  const applicationIds = rows.map((row) => row.id);
+  const nameByActivist = new Map(rows.map((row) => [row.activistId, `${row.firstName} ${row.lastName}`.trim()]));
+  if (!activistIds.length) return { education: [], work: [], courses: [], activities: [], writings: [], certificates: [], documents: [], specialtyDetails: [], nameByActivist, applicationByActivist: new Map<string, string>() };
+  const [education, work, courses, activities, writings, certificates, documents, specialtyDetails] = await Promise.all([
+    db.select().from(educationRecords).where(inArray(educationRecords.activistId, activistIds)),
+    db.select().from(workHistory).where(inArray(workHistory.activistId, activistIds)),
+    db.select().from(educationalCourses).where(inArray(educationalCourses.activistId, activistIds)),
+    db.select().from(activityRecords).where(inArray(activityRecords.activistId, activistIds)),
+    db.select().from(activistWritings).where(inArray(activistWritings.activistId, activistIds)),
+    db.select().from(certificatesTable).where(inArray(certificatesTable.activistId, activistIds)),
+    db.select({ applicationId: documents.applicationId, title: documents.title, docType: documents.docType, originalName: documents.originalName, size: documents.size, createdAt: documents.createdAt, activistId: applications.activistId })
+      .from(documents).innerJoin(applications, eq(documents.applicationId, applications.id)).where(inArray(documents.applicationId, applicationIds)),
+    db.select({ activistId: activistSpecialties.activistId, code: specialties.code, title: specialties.title, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions })
+      .from(activistSpecialties).innerJoin(specialties, eq(specialties.id, activistSpecialties.specialtyId))
+      .leftJoin(activistSpecialtyDetails, and(eq(activistSpecialtyDetails.specialtyId, activistSpecialties.specialtyId), eq(activistSpecialtyDetails.activistId, activistSpecialties.activistId)))
+      .where(inArray(activistSpecialties.activistId, activistIds)),
+  ]);
+  const applicationByActivist = new Map(rows.map((row) => [row.activistId, row.id]));
+  return { education, work, courses, activities, writings, certificates, documents, specialtyDetails, nameByActivist, applicationByActivist };
 }
 
 export function caseFilterQuery(filters: CaseSearchFilters) {

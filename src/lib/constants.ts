@@ -45,9 +45,11 @@ export type ActivityRecordKind = keyof typeof activityRecordKindLabels;
 // level (مقطع) options per type. Levels are stored as their Persian label.
 export const educationTypeLabels = { seminary: "حوزوی", university: "دانشگاهی" } as const;
 export type EducationType = keyof typeof educationTypeLabels;
+// الحاقیهٔ ۲.۱۲.۰ — مقطع تحصیلات دانشگاهی «از بی‌سواد تا دکترا»؛ مقادیر قدیمی
+// (دیپلم تا فوق دکتری) دست‌نخورده می‌مانند تا داده‌های ثبت‌شده قبلی معتبر بمانند.
 export const educationLevelOptions: Record<EducationType, string[]> = {
   seminary: ["مقدمات", "سطح ۱", "سطح ۲", "سطح ۳", "سطح ۴"],
-  university: ["دیپلم", "کاردانی", "کارشناسی", "کارشناسی ارشد", "دکتری", "فوق دکتری"],
+  university: ["بی‌سواد", "ابتدایی", "متوسطه اول", "دیپلم", "کاردانی", "کارشناسی", "کارشناسی ارشد", "دکتری", "فوق دکتری"],
 };
 export const referenceProvinces: [string, string][] = [
   ["آذربایجان شرقی", "تبریز"], ["آذربایجان غربی", "ارومیه"], ["اردبیل", "اردبیل"], ["اصفهان", "اصفهان"], ["البرز", "کرج"], ["ایلام", "ایلام"], ["بوشهر", "بوشهر"], ["تهران", "تهران"], ["چهارمحال و بختیاری", "شهرکرد"], ["خراسان جنوبی", "بیرجند"], ["خراسان رضوی", "مشهد"], ["خراسان شمالی", "بجنورد"], ["خوزستان", "اهواز"], ["زنجان", "زنجان"], ["سمنان", "سمنان"], ["سیستان و بلوچستان", "زاهدان"], ["فارس", "شیراز"], ["قزوین", "قزوین"], ["قم", "قم"], ["کردستان", "سنندج"], ["کرمان", "کرمان"], ["کرمانشاه", "کرمانشاه"], ["کهگیلویه و بویراحمد", "بویراحمد"], ["گلستان", "گرگان"], ["گیلان", "رشت"], ["لرستان", "خرم‌آباد"], ["مازندران", "ساری"], ["مرکزی", "اراک"], ["هرمزگان", "بندرعباس"], ["همدان", "همدان"], ["یزد", "یزد"],
@@ -63,34 +65,69 @@ export const referenceSpecialties = [
 // (مرحله چهارم) Structured detail options per specialty. The dropdown labels
 // below are the exact storage values' display text; storage keys stay stable
 // (Latin codes / digits) so renamed labels never corrupt stored data.
+// الحاقیهٔ ۲.۱۲.۰ — برچسب‌های میزان حفظ مطابق درخواست («حفظ ۱ جزء» تا «حفظ کل
+// قرآن کریم»)؛ کلیدهای ذخیره‌سازی (۱ تا ۳۰ و complete) تغییر نمی‌کنند تا دادهٔ
+// قدیمی پرونده‌ها بدون مهاجرت خوانده شود.
 export const hafizJuzOptions: Record<string, string> = {
-  ...Object.fromEntries(Array.from({ length: 30 }, (_, index) => [String(index + 1), `جزء ${faDigitOf(index + 1)}`])),
-  complete: "کل قرآن",
+  ...Object.fromEntries(Array.from({ length: 30 }, (_, index) => [String(index + 1), `حفظ ${faDigitOf(index + 1)} جزء`])),
+  complete: "حفظ کل قرآن کریم",
 };
 function faDigitOf(value: number) { return String(value).replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]); }
 export const recitationLevelOptions: Record<string, string> = {
   "4": "سطح ۴", "5": "سطح ۵", "6": "سطح ۶", "7": "سطح ۷",
 };
+// الحاقیهٔ ۲.۱۲.۰ — حوزه‌های فعالیت تفسیر و تدبر مطابق درخواست؛ گزینهٔ «تفسیر»
+// برای حفظ قابلیت قبلی باقی می‌ماند.
 export const commentatorOptions: Record<string, string> = {
-  tafsir: "تفسیر", tadabbor: "تدبر", lifestyle: "سبک زندگی قرآنی", concepts: "مفاهیم قرآن",
+  tafsir: "تفسیر", tadabbor: "تدبر در قرآن کریم", lifestyle: "سبک زندگی قرآنی", concepts: "مفاهیم قرآن کریم",
 };
 export const judgeOptions: Record<string, string> = {
   lahn: "صوت و لحن", waqf: "وقف و ابتدا", tajvid: "تجوید", hifz: "حفظ",
 };
-// معلم قرآن — ۸ رشته تدریس
+// الحاقیهٔ ۲.۱۲.۰ — رشته‌های معلم قرآنی مطابق فهرست ۹گانهٔ درخواست؛ گزینه‌های
+// «علوم قرآنی» و «قصه‌های قرآنی» از فهرست انتخاب حذف شده‌اند و فقط برای نمایش
+// داده‌های قدیمی در legacyTeacherSubjectLabels باقی مانده‌اند.
 export const teacherSubjectOptions: Record<string, string> = {
-  rokhani: "روخوانی و روان‌خوانی", tajvid: "تجوید", hifz: "حفظ قرآن", mafahim: "مفاهیم و مفردات قرآن",
-  ghesas: "قصه‌های قرآن", olum: "علوم قرآنی", qeraat: "قرائت", lahn: "صوت و لحن",
+  rokhani: "روخوانی و روان‌خوانی", preschool: "پیش‌دبستانی", hifz: "حفظ قرآن کریم",
+  tajvid: "تجوید", lahn: "صوت و لحن", tadabbor: "تدبر", lifestyle: "سبک زندگی قرآنی",
+  mafahim: "مفاهیم قرآن کریم", qeraat: "قرائت",
 };
-// مدرس قرآن — ۶ رشته تدریس
+/** برچسب‌های فقط‌خواندنی برای داده‌های قدیمی (دیگر قابل انتخاب نیستند). */
+export const legacyTeacherSubjectLabels: Record<string, string> = {
+  ghesas: "قصه‌های قرآنی (حذف‌شده)", olum: "علوم قرآنی (حذف‌شده)",
+};
+// الحاقیهٔ ۲.۱۲.۰ — رشته‌های مدرس قرآنی مطابق فهرست ۷گانهٔ درخواست؛ گزینه‌های
+// قبلیِ حذف‌شده در legacyModarresFieldLabels برای نمایش داده‌های قدیمی می‌مانند.
 export const modarresFieldOptions: Record<string, string> = {
-  tafsir: "تفسیر", olum: "علوم قرآنی", qeraat: "قرائت", hifz: "حفظ",
-  lifestyle: "سبک زندگی قرآنی", methods: "مناهج و روش‌های تدریس قرآن",
+  rokhani: "روخوانی و روان‌خوانی", preschool: "پیش‌دبستانی", hifz: "حفظ",
+  tajvid: "تجوید", lahn: "صوت و لحن", mafahim: "مفاهیم", tadabbor: "تدبر",
 };
-// فعال قرآنی — نقش‌های اجرایی
+/** برچسب‌های فقط‌خواندنی برای داده‌های قدیمی (دیگر قابل انتخاب نیستند). */
+export const legacyModarresFieldLabels: Record<string, string> = {
+  tafsir: "تفسیر (حذف‌شده)", olum: "علوم قرآنی (حذف‌شده)",
+  qeraat: "قرائت (حذف‌شده)", lifestyle: "سبک زندگی قرآنی (حذف‌شده)",
+  methods: "مناهج و روش‌های تدریس قرآن (حذف‌شده)",
+};
+// فعال قرآنی — نقش‌های اجرایی (الحاقیهٔ ۲.۱۲.۰: «معلم تجربی قرآن»)
 export const activistRoleOptions: Record<string, string> = {
   institute_manager: "مدیر مؤسسه قرآنی", quran_house_manager: "مدیر خانه قرآن",
-  home_session_manager: "مدیر جلسه خانگی قرآن", experiential_teacher: "معلم تجربی",
+  home_session_manager: "مدیر جلسه خانگی قرآن", experiential_teacher: "معلم تجربی قرآن",
+};
+// الحاقیهٔ ۲.۱۲.۰ — رشته‌های وابستهٔ «نوع سابقه» (تدریس/داوری) و «دوره‌های
+// گذرانده‌شده»: یک فهرست مشترک هشت‌گانه مطابق درخواست.
+export const courseFieldOptions: Record<string, string> = {
+  rokhani: "روخوانی و روان‌خوانی", preschool: "پیش‌دبستانی", hifz: "حفظ",
+  tajvid: "تجوید", lahn: "صوت و لحن", tadabbor: "تدبر",
+  lifestyle: "سبک زندگی قرآنی", mafahim: "مفاهیم",
+};
+/** انواع همکاری برای سوابق همکاری (الحاقیهٔ ۲.۱۲.۰). */
+export const cooperationTypeOptions: Record<string, string> = {
+  fulltime: "تمام‌وقت", parttime: "نیمه‌وقت", project: "پروژه‌ای",
+  volunteer: "داوطلبانه", other: "سایر",
+};
+/** نوع مدرک حافظ (الحاقیهٔ ۲.۱۲.۰). */
+export const memorizationCertTypeOptions: Record<string, string> = {
+  specialized: "دارای مدرک تخصصی حفظ", general: "دارای مدرک عمومی حفظ", none: "فاقد مدرک",
 };
 export const writingTypeLabels = { book: "کتاب", article: "مقاله" } as const;
 export type WritingType = keyof typeof writingTypeLabels;
@@ -100,14 +137,16 @@ export const specialtyDetailSpec: Record<string, { kind: SpecialtyDetailKind; op
   reciter: { kind: "level", hint: "سطح قرائت (۴ تا ۷) را انتخاب کنید." },
   commentator: { kind: "checklist", options: commentatorOptions, hint: "حوزه‌های فعالیت خود را انتخاب کنید." },
   judge: { kind: "checklist", options: judgeOptions, hint: "رشته‌های داوری خود را انتخاب کنید." },
-  trainer: { kind: "checklist", options: teacherSubjectOptions, hint: "رشته‌های تدریس خود را انتخاب کنید (حداکثر ۸)." },
-  teacher: { kind: "checklist", options: modarresFieldOptions, hint: "رشته‌های تدریس خود را انتخاب کنید (حداکثر ۶)." },
+  trainer: { kind: "checklist", options: teacherSubjectOptions, hint: "رشته‌های تدریس خود را انتخاب کنید (حداکثر ۹)." },
+  teacher: { kind: "checklist", options: modarresFieldOptions, hint: "رشته‌های تدریس خود را انتخاب کنید (حداکثر ۷)." },
   cultural_activist: { kind: "checklist", options: activistRoleOptions, hint: "نقش‌های اجرایی خود را انتخاب کنید." },
   author: { kind: "writings", hint: "کتاب یا مقاله‌های خود را با نام و موضوع ثبت کنید." },
   researcher: { kind: "none" }, other: { kind: "none" },
 };
 /** Human-readable one-line summary of a specialty detail, shared by the case
- *  detail page, the printable dossier and (later) the Excel export. */
+ *  detail page, the printable dossier and (later) the Excel export.
+ *  الحاقیهٔ ۲.۱۲.۰: کلیدهای حذف‌شده از فهرست‌های انتخاب (قصه‌های قرآنی، علوم
+ *  قرآنی و…) با برچسب‌های legacy نمایش داده می‌شوند تا دادهٔ قدیمی گم نشود. */
 export function formatSpecialtyDetail(code: string, detailValue: string | null, detailOptions: string[] | null): string | null {
   const spec = specialtyDetailSpec[code];
   if (!spec) return null;
@@ -116,13 +155,19 @@ export function formatSpecialtyDetail(code: string, detailValue: string | null, 
     return detailValue && detailValue in options ? options[detailValue] : null;
   }
   if (spec.kind === "checklist" && spec.options) {
-    const chosen = (detailOptions || []).map((key) => spec.options![key]).filter(Boolean);
+    const legacy = code === "trainer" ? legacyTeacherSubjectLabels : code === "teacher" ? legacyModarresFieldLabels : {};
+    const chosen = (detailOptions || []).map((key) => spec.options![key] || legacy[key]).filter(Boolean);
     return chosen.length ? chosen.join("، ") : null;
   }
   return null;
 }
 export const documentTypeLabels = {
   national_card: "کارت ملی", birth_certificate_page: "صفحه شناسنامه", degree: "مدرک تحصیلی",
+  // الحاقیهٔ ۲.۱۲.۰ — انواع مدرک برای بارگذاری درون‌بخشی (تحصیلات دانشگاهی/حوزوی،
+  // گواهی حفظ، گواهی تخصص، مدرک همکاری)
+  university_degree: "مدرک تحصیلی دانشگاهی", seminary_certificate: "مدرک تحصیلی حوزوی",
+  memorization_certificate: "گواهی حفظ قرآن", specialty_certificate: "گواهی تخصص قرآنی",
+  work_cooperation_document: "مدرک سابقه همکاری",
   activity_certificate: "گواهی فعالیت", course_certificate: "گواهی پایان دوره", recommendation: "معرفی‌نامه", other: "سایر",
 } as const;
 export type DocumentType = keyof typeof documentTypeLabels;

@@ -861,3 +861,35 @@
 .case-filters .jalali-clear, .audit-filters .jalali-clear { top:19px; }
 .report-filters .jalali-field { width:100%; }
 @media (max-width:640px) { .case-filters .jalali-field, .audit-filters .jalali-field { width:100%; } }
+
+/* ---------------- الحاقیهٔ ۲.۱۲.۰ — ثبت‌نام یک‌مرحله‌ای با بارگذاری درون‌بخشی ---------------- */
+.auth-layout-wide { align-items:flex-start; }
+.auth-card-wide { width:100%; max-width:960px; }
+.auth-card-wide .register-case-form { display:flex; flex-direction:column; gap:16px; text-align:right; }
+.auth-card-wide .form-section { border:1px solid var(--line-soft); border-radius:12px; padding:16px; background:var(--surface-2); }
+.auth-card-wide .form-section-head { margin-bottom:12px; }
+.auth-card-wide .form-subhead { margin:14px 0 8px; font-size:12.5px; color:var(--brand-text); }
+.register-confirm { display:flex; gap:9px; align-items:flex-start; font-size:11.5px; color:var(--muted); line-height:1.9; cursor:pointer; }
+.register-confirm input { width:16px; height:16px; margin-top:3px; accent-color:var(--brand); flex:none; }
+.upload-block { border:1px dashed var(--line-strong); border-radius:10px; padding:10px 12px; background:var(--surface); }
+.upload-block-head { display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:space-between; }
+.upload-block-head > small { color:var(--muted-3); font-size:10px; }
+.upload-pick { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); color:var(--brand-text); font-size:11px; font-weight:700; padding:8px 12px; cursor:pointer; position:relative; overflow:hidden; }
+.upload-pick:hover { border-color:var(--line-strong); background:var(--tint); }
+.upload-input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.upload-error { display:block; color:var(--danger-soft); font-size:10.5px; margin-top:6px; }
+.upload-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.upload-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:999px; background:var(--tint); color:var(--ink-soft); font-size:10.5px; padding:4px 10px; max-width:100%; }
+.upload-chip > svg { color:var(--brand-text); flex:none; }
+.upload-chip > span:first-of-type { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+.upload-remove { border:0; background:none; color:var(--muted-3); cursor:pointer; display:grid; place-items:center; padding:2px; }
+.upload-remove:hover { color:var(--danger-soft); }
+.upload-status { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted); }
+.upload-status > svg { color:var(--brand-text); }
+.memorizer-block { display:flex; flex-direction:column; gap:10px; margin-top:10px; padding:12px; border:1px solid var(--line-soft); border-radius:10px; background:var(--surface); }
+.memorizer-block > label { display:flex; flex-direction:column; gap:5px; font-size:11px; font-weight:700; color:var(--ink-soft); }
+.memorizer-block select { min-height:40px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); color:var(--ink-soft); font-size:11.5px; padding:8px 12px; outline:none; font-family:inherit; }
+.work-row-grid, .course-row-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+@media (max-width:640px) { .work-row-grid, .course-row-grid { grid-template-columns:1fr; } }
+.register-submit { margin-top:6px; }
+@media (max-width:900px) { .auth-layout-wide { flex-direction:column; } .auth-card-wide { max-width:none; } .auth-story { min-height:200px; } }

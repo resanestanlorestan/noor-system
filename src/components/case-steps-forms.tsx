@@ -12,7 +12,7 @@ import { AlertTriangle, Check, LoaderCircle, Plus, Save, Trash2 } from "lucide-r
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
 import { initialActionState, type ActionState } from "@/lib/action-state";
 import { isoToJalali } from "@/lib/format";
-import { educationLevelOptions, educationTypeLabels, hafizJuzOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
+import { educationLevelOptions, educationTypeLabels, cooperationTypeOptions, hafizJuzOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
@@ -30,10 +30,10 @@ type LocationValues = { city: string; postalCode: string; address: string; activ
 type DetailState = { value: string; options: string[] };
 type EducationRow = { type: string; level: string; field: string; centerName: string; certificate: string };
 type WritingRow = { workType: string; title: string; topic: string };
-type WorkRow = { title: string; employer: string; position: string; startDate: string; endDate: string; description: string };
+type WorkRow = { title: string; employer: string; cooperationType: string; position: string; startDate: string; endDate: string; description: string };
 const emptyEducationRow: EducationRow = { type: "", level: "", field: "", centerName: "", certificate: "" };
 const emptyWritingRow: WritingRow = { workType: "book", title: "", topic: "" };
-const emptyWorkRow: WorkRow = { title: "", employer: "", position: "", startDate: "", endDate: "", description: "" };
+const emptyWorkRow: WorkRow = { title: "", employer: "", cooperationType: "", position: "", startDate: "", endDate: "", description: "" };
 
 /** After a Server Action response React resets uncontrolled fields; controlled
  *  selects are not re-rendered when their value prop is unchanged, so their
@@ -238,7 +238,8 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
         {defaults.workHistory.length > 0 && <div className="education-existing"><h3 className="form-subhead">سوابق شغلی ثبت‌شده این پرونده</h3><ul>{defaults.workHistory.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.employer, item.position, item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {workRows.length > 0 && <div className="education-rows">{workRows.map((row, index) => <div className="education-row" key={index}><div className="writing-row-grid">
           <label>عنوان یا محل اشتغال <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateWorkRow(index, { title: event.target.value })} placeholder="مثلاً دبیری آموزش و پرورش" /></label>
-          <label>کارفرما یا سازمان<input value={row.employer} maxLength={180} onChange={(event) => updateWorkRow(index, { employer: event.target.value })} placeholder="اختیاری" /></label>
+          <label>نام سازمان یا مجموعه<input value={row.employer} maxLength={180} onChange={(event) => updateWorkRow(index, { employer: event.target.value })} placeholder="اختیاری" /></label>
+          <label>نوع همکاری<select value={row.cooperationType} onChange={(event) => updateWorkRow(index, { cooperationType: event.target.value })}><option value="">انتخاب کنید (اختیاری)</option>{Object.entries(cooperationTypeOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <label>سمت<input value={row.position} maxLength={120} onChange={(event) => updateWorkRow(index, { position: event.target.value })} placeholder="اختیاری" /></label>
           <label>تاریخ شروع شمسی<JalaliDateInput ariaLabel="تاریخ شروع سابقهٔ شغلی" value={row.startDate} onChange={(jalali) => updateWorkRow(index, { startDate: jalali })} /></label>
           <label>تاریخ پایان شمسی (خالی = تاکنون)<JalaliDateInput ariaLabel="تاریخ پایان سابقهٔ شغلی" value={row.endDate} onChange={(jalali) => updateWorkRow(index, { endDate: jalali })} /></label>

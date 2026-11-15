@@ -80,7 +80,13 @@ describe("phase-1 reference data", () => {
   it("exposes the document type catalogue", () => {
     expect(Object.keys(documentTypeLabels)).toContain("national_card");
     expect(Object.keys(documentTypeLabels)).toContain("course_certificate");
-    expect(Object.keys(documentTypeLabels)).toHaveLength(7);
+    // الحاقیهٔ ۲.۱۲.۰ — پنج نوع مدرک درون‌بخشی جدید هم به کاتالوگ افزوده شد
+    expect(Object.keys(documentTypeLabels)).toContain("university_degree");
+    expect(Object.keys(documentTypeLabels)).toContain("seminary_certificate");
+    expect(Object.keys(documentTypeLabels)).toContain("memorization_certificate");
+    expect(Object.keys(documentTypeLabels)).toContain("specialty_certificate");
+    expect(Object.keys(documentTypeLabels)).toContain("work_cooperation_document");
+    expect(Object.keys(documentTypeLabels)).toHaveLength(12);
   });
 });
 
