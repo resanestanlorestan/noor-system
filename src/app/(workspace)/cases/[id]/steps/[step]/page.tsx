@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRight, CheckCircle2, Download, FileText, Pencil, Send, ShieldCheck, UserRound } from "lucide-react";
 import { db } from "@/db";
@@ -47,7 +47,14 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
     <CaseStepsBar steps={plan.steps} caseId={id} completedCount={plan.completedCount} totalCount={plan.totalCount} /></>;
 
   if (requested.key === "identity") {
-    return <>{head}<section className="ws-panel form-panel"><IdentityStepForm caseId={id} hasNationalId={Boolean(person.nationalIdHash)} needsChangeReason={nonActivistEditor} defaults={{ firstName: person.firstName, lastName: person.lastName, fatherName: person.fatherName || "", idCardNumber: person.idCardNumber || "", idIssuePlace: person.idIssuePlace || "", birthDate: isoToJalali(person.birthDate), gender: person.gender || "", phone: person.phone || "", alternatePhone: person.alternatePhone || "", contactEmail: person.email || "" }} /></section></>;
+    // الحاقیهٔ ۲.۱۴.۱ — مقطع و مدرک تحصیلات ثبت‌شده برای پیش‌پرکردن کارت‌های گام هویتی
+    const eduRows = await db.select({ type: educationRecords.type, level: educationRecords.level, documentId: educationRecords.documentId }).from(educationRecords).where(eq(educationRecords.activistId, person.id));
+    const eduDocIds = eduRows.map((item) => item.documentId).filter((value): value is string => Boolean(value));
+    const eduDocs = eduDocIds.length ? await db.select({ id: documents.id, name: documents.originalName }).from(documents).where(inArray(documents.id, eduDocIds)) : [];
+    const docName = (id: string | null) => id ? eduDocs.find((item) => item.id === id)?.name ?? null : null;
+    const universityEdu = eduRows.find((item) => item.type === "university");
+    const seminaryEdu = eduRows.find((item) => item.type === "seminary");
+    return <>{head}<section className="ws-panel form-panel"><IdentityStepForm caseId={id} hasNationalId={Boolean(person.nationalIdHash)} needsChangeReason={nonActivistEditor} defaults={{ firstName: person.firstName, lastName: person.lastName, fatherName: person.fatherName || "", idCardNumber: person.idCardNumber || "", idIssuePlace: person.idIssuePlace || "", birthDate: isoToJalali(person.birthDate), gender: person.gender || "", phone: person.phone || "", alternatePhone: person.alternatePhone || "", contactEmail: person.email || "", universityLevel: universityEdu?.level || "", seminaryLevel: seminaryEdu?.level || "", universityDocName: docName(universityEdu?.documentId ?? null) ?? undefined, seminaryDocName: docName(seminaryEdu?.documentId ?? null) ?? undefined }} /></section></>;
   }
 
   if (requested.key === "location") {
@@ -58,18 +65,17 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
   }
 
   if (requested.key === "specialties") {
-    const [allSpecialties, selected, detailRows, writingRows, education, workRows, courseRows, activityRows] = await Promise.all([
+    const [allSpecialties, selected, detailRows, writingRows, workRows, courseRows, activityRows] = await Promise.all([
       db.select().from(specialties).orderBy(specialties.id),
       db.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, person.id)),
       db.select({ specialtyId: activistSpecialtyDetails.specialtyId, code: specialties.code, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).innerJoin(specialties, eq(activistSpecialtyDetails.specialtyId, specialties.id)).where(eq(activistSpecialtyDetails.activistId, person.id)),
       db.select().from(activistWritings).where(eq(activistWritings.activistId, person.id)).orderBy(activistWritings.createdAt),
-      db.select().from(educationRecords).where(eq(educationRecords.activistId, person.id)),
       db.select().from(workHistory).where(eq(workHistory.activistId, person.id)),
       // الحاقیهٔ ۲.۱۴.۰ — دوره‌ها و سوابق فعالیت ثبت‌شده برای نمایش در فهرست موجود
       db.select().from(educationalCourses).where(eq(educationalCourses.activistId, person.id)).orderBy(educationalCourses.createdAt),
       db.select().from(activityRecords).where(eq(activityRecords.activistId, person.id)).orderBy(activityRecords.createdAt),
     ]);
-    return <>{head}<section className="ws-panel form-panel"><SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), education: education.map((item) => ({ id: item.id, typeLabel: educationTypeLabels[item.type], level: item.level, field: item.field, centerName: item.centerName, certificate: item.certificate })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
+    return <>{head}<section className="ws-panel form-panel"><SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
   }
 
   if (requested.key === "documents") {

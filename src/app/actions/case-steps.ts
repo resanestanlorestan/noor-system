@@ -128,6 +128,30 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
   if (identityMissing.length) return { error: `فیلدهای اجباری مرحلهٔ هویتی را تکمیل کنید: ${identityMissing.join("، ")}` };
   const protectedId = nationalId ? await protectNationalId(nationalId) : null;
 
+  // الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی/حوزوی گام هویتی (مقطع کشویی + مدرک همان بخش)
+  let educationRows: ReturnType<typeof parseEducationInput>;
+  let identityDocs: ReturnType<typeof parseStagedDocsInput>;
+  try {
+    educationRows = parseEducationInput(data);
+    identityDocs = parseStagedDocsInput(data, /^(university|seminary)$/);
+  } catch {
+    return { error: "اطلاعات تحصیلات یا مدارک بارگذاری‌شده معتبر نیست؛ مقطع و فایل‌ها را بررسی کنید." };
+  }
+  const identityDocKeys = new Set(identityDocs.map((doc) => doc.key));
+  if (educationRows.some((row) => row.docKey && !identityDocKeys.has(row.docKey))) return { error: "پیوند مدرک تحصیلات معتبر نیست؛ فایل را دوباره بارگذاری کنید." };
+  for (const doc of identityDocs) {
+    const target = path.join(privateDir, "uploads", doc.key);
+    try {
+      const info = await stat(target);
+      if (!info.isFile() || info.size !== doc.size) return { error: "یکی از فایل‌های بارگذاری‌شده یافت نشد؛ دوباره بارگذاری کنید." };
+    } catch { return { error: "یکی از فایل‌های بارگذاری‌شده یافت نشد؛ دوباره بارگذاری کنید." }; }
+  }
+  const universityRow = educationRows.find((row) => row.type === "university");
+  const seminaryRow = educationRows.find((row) => row.type === "seminary");
+  const universityDoc = identityDocs.find((doc) => doc.section === "university");
+  const seminaryDoc = identityDocs.find((doc) => doc.section === "seminary");
+  const identityHasEducation = Boolean(educationRows.length || identityDocs.length);
+
   if (existing) {
     try {
       await patchActivist(user, existing, {
@@ -138,6 +162,48 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
       }, CASE_STEPS[0].title, existing.application.status === "draft" ? "completing" : null);
     } catch {
       return { error: "ذخیرهٔ مرحلهٔ هویتی انجام نشد؛ وضعیت پرونده را دوباره بررسی کنید." };
+    }
+    // الحاقیهٔ ۲.۱۴.۱ — ذخیرهٔ تحصیلات در ویرایش: جایگزینی فقط ردیف همان نوع؛
+    // در نبود فایل تازه، پیوند مدرک قبلی حفظ می‌شود تا مدرک‌های قدیمی از بین نروند
+    if (identityHasEducation) {
+      try {
+        await db.transaction(async (tx) => {
+          const docIdByKey = new Map<string, string>();
+          for (const doc of identityDocs) {
+            const [inserted] = await tx.insert(documents).values({
+              applicationId: existing.application.id,
+              storageKey: doc.key,
+              originalName: doc.name,
+              title: doc.section === "university" ? "مدرک تحصیلی دانشگاهی" : "مدرک تحصیلی حوزوی",
+              docType: doc.section === "university" ? "university_degree" : "seminary_certificate",
+              kind: "evidence",
+              mimeType: doc.mime,
+              size: doc.size,
+              uploadedBy: user.id,
+            }).returning({ id: documents.id });
+            docIdByKey.set(doc.key, inserted.id);
+          }
+          for (const row of educationRows) {
+            const [previous] = await tx.select({ documentId: educationRecords.documentId }).from(educationRecords).where(and(eq(educationRecords.activistId, existing.activist.id), eq(educationRecords.type, row.type))).limit(1);
+            await tx.delete(educationRecords).where(and(eq(educationRecords.activistId, existing.activist.id), eq(educationRecords.type, row.type)));
+            await tx.insert(educationRecords).values({
+              type: row.type, level: row.level, field: row.field, centerName: row.centerName, certificate: row.certificate,
+              activistId: existing.activist.id,
+              documentId: row.docKey ? docIdByKey.get(row.docKey) ?? null : previous?.documentId ?? null,
+              createdBy: user.id,
+            });
+          }
+          await tx.update(activists).set({
+            ...(universityRow ? { universityLevel: universityRow.level } : {}),
+            ...(seminaryRow ? { seminaryLevel: seminaryRow.level } : {}),
+            ...(universityDoc ? { universityDocumentId: docIdByKey.get(universityDoc.key) ?? null } : {}),
+            ...(seminaryDoc ? { seminaryDocumentId: docIdByKey.get(seminaryDoc.key) ?? null } : {}),
+            updatedAt: new Date(),
+          }).where(eq(activists.id, existing.activist.id));
+        });
+      } catch {
+        return { error: "ذخیرهٔ تحصیلات گام هویتی انجام نشد؛ دوباره تلاش کنید." };
+      }
     }
     refresh(existing.application.id);
     redirect(`/cases/${existing.application.id}/steps/2`);
@@ -191,6 +257,39 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
       await tx.insert(statusHistory).values({ applicationId: application.id, toStatus: "initial", actorId: user.id, note: "شروع ثبت پرونده" });
       await tx.update(applications).set({ status: "draft" }).where(eq(applications.id, application.id));
       await tx.insert(statusHistory).values({ applicationId: application.id, fromStatus: "initial", toStatus: "draft", actorId: user.id, note: "ایجاد پیش‌نویس پرونده" });
+      // الحاقیهٔ ۲.۱۴.۱ — ذخیرهٔ تحصیلات و مدارک گام هویتی هنگام ایجاد پروندهٔ تازه
+      if (identityHasEducation) {
+        const docIdByKey = new Map<string, string>();
+        for (const doc of identityDocs) {
+          const [inserted] = await tx.insert(documents).values({
+            applicationId: application.id,
+            storageKey: doc.key,
+            originalName: doc.name,
+            title: doc.section === "university" ? "مدرک تحصیلی دانشگاهی" : "مدرک تحصیلی حوزوی",
+            docType: doc.section === "university" ? "university_degree" : "seminary_certificate",
+            kind: "evidence",
+            mimeType: doc.mime,
+            size: doc.size,
+            uploadedBy: user.id,
+          }).returning({ id: documents.id });
+          docIdByKey.set(doc.key, inserted.id);
+        }
+        for (const row of educationRows) {
+          await tx.insert(educationRecords).values({
+            type: row.type, level: row.level, field: row.field, centerName: row.centerName, certificate: row.certificate,
+            activistId: person.id,
+            documentId: row.docKey ? docIdByKey.get(row.docKey) ?? null : null,
+            createdBy: user.id,
+          });
+        }
+        await tx.update(activists).set({
+          ...(universityRow ? { universityLevel: universityRow.level, universityDocumentId: universityRow.docKey ? docIdByKey.get(universityRow.docKey) ?? null : null } : {}),
+          ...(seminaryRow ? { seminaryLevel: seminaryRow.level, seminaryDocumentId: seminaryRow.docKey ? docIdByKey.get(seminaryRow.docKey) ?? null : null } : {}),
+          ...(universityDoc ? { universityDocumentId: docIdByKey.get(universityDoc.key) ?? null } : {}),
+          ...(seminaryDoc ? { seminaryDocumentId: docIdByKey.get(seminaryDoc.key) ?? null } : {}),
+          updatedAt: new Date(),
+        }).where(eq(activists.id, person.id));
+      }
       await tx.insert(auditLogs).values({ actorId: user.id, action: "create_draft", targetType: "application", targetId: application.id, detail: "مرحلهٔ هویتی ویزارد" });
       return application.id;
     });
@@ -277,10 +376,6 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
     return spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist") && !detailCodes.has(item.code);
   });
   if (incomplete.length) return { error: `جزئیات این تخصص‌ها کامل نشده است: ${incomplete.map((item) => item.title).join("، ")}` };
-  let educationRows: ReturnType<typeof parseEducationInput>;
-  try { educationRows = parseEducationInput(data); } catch {
-    return { error: "اطلاعات تحصیلی ارسالی معتبر نیست؛ نوع و مقطع هر ردیف را بررسی کنید." };
-  }
   let workHistoryRows: ReturnType<typeof parseWorkHistoryInput>;
   try { workHistoryRows = parseWorkHistoryInput(data); } catch {
     return { error: "سوابق شغلی ارسالی معتبر نیست؛ عنوان و تاریخ هر ردیف را بررسی کنید." };
@@ -303,7 +398,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
   if (memorizationCertTypeRaw && !memorizationCertType) return { error: "نوع مدرک حافظ معتبر نیست." };
   // پیوند مدارک ردیفی: هر docKey باید در فایل‌های staged همان بخش آمده باشد
   const stagedKeys = new Set(stagedDocs.map((doc) => doc.key));
-  const rowDocKeys = [...educationRows, ...workHistoryRows, ...courseRows].map((row) => row.docKey).filter((key): key is string => Boolean(key));
+  const rowDocKeys = [...workHistoryRows, ...courseRows].map((row) => row.docKey).filter((key): key is string => Boolean(key));
   if (rowDocKeys.some((key) => !stagedKeys.has(key))) return { error: "پیوند مدرک ردیف‌های تحصیلی/شغلی/دوره معتبر نیست؛ فایل را دوباره بارگذاری کنید." };
   const certKeysInDocs = specialtyCertKeys.every((item) => stagedKeys.has(item.key));
   if (!certKeysInDocs) return { error: "پیوند گواهی تخصص‌ها با فایل‌های بارگذاری‌شده هم‌خوانی ندارد." };
@@ -337,10 +432,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
       // الحاقیهٔ ۲.۱۴.۰ — مدارک staged به پرونده متصل و نگاشت کلید ← شناسه ساخته می‌شود
       const docIdByKey = new Map<string, string>();
       for (const doc of stagedDocs) {
-        const educationRow = doc.section.startsWith("education:") ? educationRows.find((item) => item.docKey === doc.key) : null;
-        const docType = doc.section.startsWith("education:")
-          ? (educationRow?.type === "university" ? "university_degree" : educationRow?.type === "seminary" ? "seminary_certificate" : "degree")
-          : doc.section === "memorization" ? "memorization_certificate"
+        const docType = doc.section === "memorization" ? "memorization_certificate"
           : doc.section.startsWith("specialty:") ? "specialty_certificate"
           : doc.section.startsWith("work:") ? "work_cooperation_document"
           : doc.section.startsWith("course:") ? "course_certificate"
@@ -349,8 +441,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
           applicationId: row.application.id,
           storageKey: doc.key,
           originalName: doc.name,
-          title: doc.section.startsWith("education:") ? (educationRow?.type === "seminary" ? "مدرک تحصیلی حوزوی" : "مدرک تحصیلی دانشگاهی")
-            : doc.section === "memorization" ? "گواهی حفظ قرآن"
+          title: doc.section === "memorization" ? "گواهی حفظ قرآن"
             : doc.section.startsWith("specialty:") ? "گواهی تخصص قرآنی"
             : doc.section.startsWith("work:") ? "مدرک سابقه همکاری"
             : doc.section.startsWith("course:") ? "گواهی پایان دوره"
@@ -377,19 +468,15 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
         })));
       }
       if (writingRows.length) await tx.insert(activistWritings).values(writingRows.map((item) => ({ ...item, activistId: row.activist.id, createdBy: user.id })));
-      if (educationRows.length) await tx.insert(educationRecords).values(educationRows.map((item) => ({ ...item, activistId: row.activist.id, documentId: item.docKey ? docIdByKey.get(item.docKey) ?? null : null, createdBy: user.id })));
       if (workHistoryRows.length) await tx.insert(workHistory).values(workHistoryRows.map((item) => ({ ...item, activistId: row.activist.id, documentId: item.docKey ? docIdByKey.get(item.docKey) ?? null : null, createdBy: user.id })));
       if (courseRows.length) await tx.insert(educationalCourses).values(courseRows.map((item) => ({ ...item, activistId: row.activist.id, documentId: item.docKey ? docIdByKey.get(item.docKey) ?? null : null, createdBy: user.id })));
       if (activityRows.length) await tx.insert(activityRecords).values(activityRows.map((item) => ({ ...item, kind: item.kind as typeof activityRecords.$inferInsert.kind, activistId: row.activist.id, createdBy: user.id })));
       // ستون‌های نمایش سریع activists — فقط وقتی دادهٔ تازه آمده تا اطلاعات قبلی بازنویسی نشود
-      const universityRow = educationRows.find((item) => item.type === "university");
-      const seminaryRow = educationRows.find((item) => item.type === "seminary");
+      // (الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی/حوزوی به گام هویتی منتقل شد)
       await tx.update(activists).set({
         job: field(data, "job", 120) || null,
         notes: field(data, "notes", 4000) || null,
         ...(memorizerChosen && memorizationCertType ? { memorizationCertType } : {}),
-        ...(universityRow ? { universityLevel: universityRow.level, universityDocumentId: universityRow.docKey ? docIdByKey.get(universityRow.docKey) ?? null : null } : {}),
-        ...(seminaryRow ? { seminaryLevel: seminaryRow.level, seminaryDocumentId: seminaryRow.docKey ? docIdByKey.get(seminaryRow.docKey) ?? null : null } : {}),
         ...(memorizationDoc ? { memorizationDocumentId: docIdByKey.get(memorizationDoc.key) ?? null } : {}),
         updatedAt: new Date(),
       }).where(eq(activists.id, row.activist.id));

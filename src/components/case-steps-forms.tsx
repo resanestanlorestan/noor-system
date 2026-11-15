@@ -30,7 +30,6 @@ export type StepExistingWorkHistory = { id: string; title: string; employer: str
 type IdentityValues = { firstName: string; lastName: string; fatherName: string; nationalId: string; idCardNumber: string; idIssuePlace: string; birthDate: string; gender: string; phone: string; alternatePhone: string; contactEmail: string };
 type LocationValues = { city: string; postalCode: string; address: string; activityPlace: string; organization: string };
 type DetailState = { value: string; options: string[] };
-type EducationRow = { type: string; level: string; field: string; centerName: string; certificate: string };
 type CourseRow = { title: string; provider: string; field: string; completedDate: string; hours: string };
 type ActivityRow = { kind: string; field: string; title: string; organization: string; position: string; startDate: string; endDate: string; description: string };
 const emptyCourseRow: CourseRow = { title: "", provider: "", field: "", completedDate: "", hours: "" };
@@ -39,7 +38,6 @@ export type StepExistingCourse = { id: string; title: string; provider: string |
 export type StepExistingActivity = { id: string; kindLabel: string; title: string; organization: string | null; position: string | null; fieldLabel: string | null; periodLabel: string | null; description: string | null };
 type WritingRow = { workType: string; title: string; topic: string };
 type WorkRow = { title: string; employer: string; cooperationType: string; position: string; startDate: string; endDate: string; description: string };
-const emptyEducationRow: EducationRow = { type: "", level: "", field: "", centerName: "", certificate: "" };
 const emptyWritingRow: WritingRow = { workType: "book", title: "", topic: "" };
 const emptyWorkRow: WorkRow = { title: "", employer: "", cooperationType: "", position: "", startDate: "", endDate: "", description: "" };
 
@@ -77,13 +75,27 @@ function ChangeReasonField({ required }: { required: boolean }) {
 
 /* --------------------------- مرحلهٔ ۱ — هویتی --------------------------- */
 
-export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues>; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean }) {
+export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveIdentityStepAction, initialActionState);
   const [values, setValues] = useState<IdentityValues>(() => ({
     firstName: defaults?.firstName || "", lastName: defaults?.lastName || "", fatherName: defaults?.fatherName || "", nationalId: "",
     idCardNumber: defaults?.idCardNumber || "", idIssuePlace: defaults?.idIssuePlace || "", birthDate: defaults?.birthDate || "",
     gender: defaults?.gender || "", phone: defaults?.phone || "", alternatePhone: defaults?.alternatePhone || "", contactEmail: defaults?.contactEmail || "",
   }));
+  // الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی و حوزوی در گام هویتی: مقطع کشویی + بارگذاری
+  // مدرک در همان بخش (همان ستون‌ها و جداول قبلی؛ بدون فیلد تکراری)
+  const [universityLevel, setUniversityLevel] = useState(defaults?.universityLevel || "");
+  const [seminaryLevel, setSeminaryLevel] = useState(defaults?.seminaryLevel || "");
+  const [universitySlot, setUniversitySlot] = useState<DocSlot[]>([]);
+  const [seminarySlot, setSeminarySlot] = useState<DocSlot[]>([]);
+  const educationPayload = [
+    universityLevel ? { type: "university", level: universityLevel, field: "", centerName: "", certificate: "", docKey: universitySlot[0]?.key || "" } : null,
+    seminaryLevel ? { type: "seminary", level: seminaryLevel, field: "", centerName: "", certificate: "", docKey: seminarySlot[0]?.key || "" } : null,
+  ].filter(Boolean);
+  const educationDocsPayload: Array<DocSlot & { section: string }> = [
+    ...universitySlot.map((slot) => ({ ...slot, section: "university" })),
+    ...seminarySlot.map((slot) => ({ ...slot, section: "seminary" })),
+  ];
   const [source, setSource] = useState(sourceOptions?.[0]?.value ?? "");
   const [ack, setAck] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -92,6 +104,8 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
   const acknowledge = () => { if (pending) return; setAck(true); requestAnimationFrame(() => formRef.current?.requestSubmit()); };
   return <form ref={formRef} action={action} className="profile-form wizard-step-form" noValidate>
     <input type="hidden" name="caseId" value={caseId || ""} /><input type="hidden" name="dupAck" value={ack ? "yes" : ""} />
+    <input type="hidden" name="educationRecords" value={JSON.stringify(educationPayload)} />
+    <input type="hidden" name="stagedDocs" value={JSON.stringify(educationDocsPayload)} />
     {state.error && <div className="form-error profile-error" role="alert">{state.error} {state.existingCaseId && <Link className="duplicate-link" href={`/cases/${state.existingCaseId}`}>مشاهده پرونده موجود ←</Link>}</div>}
     <DuplicateWarning state={state} onAcknowledge={acknowledge} pending={pending} />
     <section className="form-section">
@@ -109,6 +123,26 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
         <label>شماره همراه جایگزین <i>*</i><input required {...bind("alternatePhone")} inputMode="tel" maxLength={11} placeholder="شماره همراه دوم" /></label>
         <label>ایمیل تماس (اختیاری)<input {...bind("contactEmail")} type="email" dir="ltr" placeholder="example@email.com" /></label>
         {sourceOptions && sourceOptions.length > 0 && <label>منبع ثبت اطلاعات<select name="source" data-selected-value={source} value={source} onChange={(event) => setSource(event.target.value)}>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>در صورت ورود اطلاعات از فرم کاغذی، گزینه فرم کاغذی را انتخاب کنید.</small></label>}
+      </div>
+    </section>
+    {/* الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی و حوزوی با بارگذاری مدرک در همان بخش */}
+    <section className="form-section">
+      <div className="form-section-head"><h2>تحصیلات</h2><p>مقطع تحصیلی دانشگاهی (از بی‌سواد تا دکترا) و وضعیت تحصیلات حوزوی (سطح ۱ تا سطح ۴) را انتخاب کنید و در صورت داشتن مدرک، آن را در همان بخش بارگذاری کنید. هر دو بخش اختیاری‌اند و اگر مقطعی انتخاب نشود، اطلاعات قبلی پرونده دست‌نخورده می‌ماند.</p></div>
+      <div className="writings-block">
+        <h3 className="form-subhead">تحصیلات دانشگاهی</h3>
+        <div className="memorizer-block">
+          <label>مقطع تحصیلی<select data-selected-value={universityLevel} value={universityLevel} onChange={(event) => setUniversityLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.university.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
+          <SectionUpload section="university" slots={universitySlot} onChange={setUniversitySlot} label="بارگذاری مدرک تحصیلی دانشگاهی" />
+          {defaults?.universityDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.universityDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
+        </div>
+      </div>
+      <div className="writings-block">
+        <h3 className="form-subhead">تحصیلات حوزوی</h3>
+        <div className="memorizer-block">
+          <label>سطح تحصیلات حوزوی<select data-selected-value={seminaryLevel} value={seminaryLevel} onChange={(event) => setSeminaryLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.seminary.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
+          <SectionUpload section="seminary" slots={seminarySlot} onChange={setSeminarySlot} label="بارگذاری مدرک تحصیلی حوزوی" />
+          {defaults?.seminaryDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.seminaryDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
+        </div>
       </div>
     </section>
     <ChangeReasonField required={Boolean(needsChangeReason)} />
@@ -156,7 +190,7 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
 
 /* ------------------- مرحلهٔ ۳ — تخصص‌ها و سوابق ------------------- */
 
-export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; education: StepExistingEducation[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean }) {
+export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveSpecialtiesStepAction, initialActionState);
   const [selectedSpecialties, setSelectedSpecialties] = useState<Set<number>>(() => new Set(defaults.specialtyIds));
   const [specialtyDetailState, setSpecialtyDetailState] = useState<Record<number, DetailState>>(() => {
@@ -177,13 +211,11 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
   });
   const [juzModal, setJuzModal] = useState<{ id: number; count: number } | null>(null);
   const [writingRows, setWritingRows] = useState<WritingRow[]>([]);
-  const [educationRows, setEducationRows] = useState<EducationRow[]>([]);
   const [workRows, setWorkRows] = useState<WorkRow[]>([]);
   // الحاقیهٔ ۲.۱۴.۰ — انتقال کامل امکانات فرم قبلی ثبت‌نام به ویزارد:
   // دوره‌ها، سوابق فعالیت قرآنی، مدارک ردیفی، نوع مدرک حافظ و گواهی تخصص‌ها.
   const [courseRows, setCourseRows] = useState<CourseRow[]>([]);
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
-  const [educationSlots, setEducationSlots] = useState<Record<number, DocSlot[]>>({});
   const [workSlots, setWorkSlots] = useState<Record<number, DocSlot[]>>({});
   const [courseSlots, setCourseSlots] = useState<Record<number, DocSlot[]>>({});
   const [memorizationCertType, setMemorizationCertType] = useState("");
@@ -214,9 +246,6 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
   const addWritingRow = () => setWritingRows((current) => [...current, { ...emptyWritingRow }]);
   const updateWritingRow = (index: number, patch: Partial<WritingRow>) => setWritingRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   const removeWritingRow = (index: number) => setWritingRows((current) => current.filter((_, i) => i !== index));
-  const updateEducationRow = (index: number, patch: Partial<EducationRow>) => setEducationRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  const addEducationRow = () => setEducationRows((current) => [...current, { ...emptyEducationRow }]);
-  const removeEducationRow = (index: number) => setEducationRows((current) => current.filter((_, i) => i !== index));
   const addWorkRow = () => setWorkRows((current) => [...current, { ...emptyWorkRow }]);
   const updateWorkRow = (index: number, patch: Partial<WorkRow>) => setWorkRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   const removeWorkRow = (index: number) => setWorkRows((current) => current.filter((_, i) => i !== index));
@@ -248,7 +277,6 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     .filter((row) => row !== null);
   const writingsPayload = authorSelected ? writingRows.filter((row) => row.workType && row.title.trim().length >= 2) : [];
   // الحاقیهٔ ۲.۱۴.۰ — کلید مدرک هر ردیف از بارگذار درون‌بخشی به payload می‌آید
-  const educationPayload = educationRows.map((row, index) => ({ ...row, docKey: educationSlots[index]?.[0]?.key || "" })).filter((row) => row.type && row.level);
   const workHistoryPayload = workRows.map((row, index) => ({ ...row, docKey: workSlots[index]?.[0]?.key || "" })).filter((row) => row.title.trim().length >= 2);
   const coursesPayload = courseRows.map((row, index) => ({ ...row, docKey: courseSlots[index]?.[0]?.key || "" })).filter((row) => row.title.trim().length >= 2);
   const activitiesPayload = activityRows.filter((row) => row.title.trim().length >= 2 && row.kind);
@@ -256,7 +284,6 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     .filter((item) => selectedSpecialties.has(item.id) && certSlots[item.id]?.[0])
     .map((item) => ({ code: item.code, key: certSlots[item.id][0].key }));
   const stagedDocsPayload: Array<DocSlot & { section: string }> = [
-    ...Object.entries(educationSlots).flatMap(([index, slots]) => slots.map((slot) => ({ ...slot, section: `education:${index}` }))),
     ...Object.entries(workSlots).flatMap(([index, slots]) => slots.map((slot) => ({ ...slot, section: `work:${index}` }))),
     ...Object.entries(courseSlots).flatMap(([index, slots]) => slots.map((slot) => ({ ...slot, section: `course:${index}` }))),
     ...memorizationSlot.map((slot) => ({ ...slot, section: "memorization" })),
@@ -266,7 +293,6 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     <input type="hidden" name="caseId" value={caseId} />
     <input type="hidden" name="specialtyDetails" value={JSON.stringify(specialtyDetailsPayload)} />
     <input type="hidden" name="writings" value={JSON.stringify(writingsPayload)} />
-    <input type="hidden" name="educationRecords" value={JSON.stringify(educationPayload)} />
     <input type="hidden" name="workHistory" value={JSON.stringify(workHistoryPayload)} />
     {/* الحاقیهٔ ۲.۱۴.۰ — بخش‌های منتقل‌شده از فرم قبلی ثبت‌نام */}
     <input type="hidden" name="courses" value={JSON.stringify(coursesPayload)} />
@@ -313,14 +339,6 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       <div className="form-grid">
         <label>شغل<input name="job" defaultValue={defaults.job || ""} maxLength={120} placeholder="اختیاری؛ مثلاً دانشجو، معلم، کارمند" /><small>فیلد مستقل از مؤسسه قرآنی محل فعالیت ثبت می‌شود.</small></label>
         <label className="full-field">توضیحات تکمیلی<textarea name="notes" defaultValue={defaults.notes || ""} maxLength={4000} rows={3} placeholder="در صورت نیاز" /></label>
-      </div>
-      <div className="writings-block">
-        {defaults.education.length > 0 && <div className="education-existing"><h3 className="form-subhead">تحصیلات ثبت‌شده این پرونده</h3><ul>{defaults.education.map((item) => <li key={item.id}><strong>{item.typeLabel} · {item.level}</strong><small>{[item.field, item.centerName, item.certificate].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
-        {educationRows.length > 0 && <div className="education-rows">{educationRows.map((row, index) => <div className="education-row" key={index}><div className="education-row-grid"><label>نوع تحصیل <i>*</i><select value={row.type} onChange={(event) => updateEducationRow(index, { type: event.target.value, level: "" })}><option value="">انتخاب کنید</option>{Object.entries(educationTypeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>مقطع <i>*</i><select value={row.level} disabled={!row.type} onChange={(event) => updateEducationRow(index, { level: event.target.value })}><option value="">{row.type ? "انتخاب کنید" : "ابتدا نوع را انتخاب کنید"}</option>{(educationLevelOptions[row.type as EducationType] || []).map((level) => <option key={level} value={level}>{level}</option>)}</select></label><label>رشته<input value={row.field} maxLength={120} onChange={(event) => updateEducationRow(index, { field: event.target.value })} placeholder="مثلاً علوم قرآنی" /></label><label>نام مرکز<input value={row.centerName} maxLength={180} onChange={(event) => updateEducationRow(index, { centerName: event.target.value })} placeholder="نام دانشگاه یا حوزه" /></label><label>مدرک<input value={row.certificate} maxLength={180} onChange={(event) => updateEducationRow(index, { certificate: event.target.value })} placeholder="مثلاً گواهی پایان سطح ۲" /></label></div>
-          {/* الحاقیهٔ ۲.۱۴.۰ — بارگذاری مدرک همان ردیف تحصیلی */}
-          <SectionUpload section={`education:${index}`} slots={educationSlots[index] || []} onChange={(next) => setEducationSlots((current) => ({ ...current, [index]: next }))} label="بارگذاری مدرک این ردیف تحصیلی" />
-          <button type="button" className="row-remove" onClick={() => { removeEducationRow(index); setEducationSlots((current) => { const next = { ...current }; delete next[index]; return next; }); }} title="حذف این ردیف"><Trash2 size={15} /> حذف ردیف</button></div>)}</div>}
-        <button type="button" className="secondary-button education-add" onClick={addEducationRow}><Plus size={16} /> افزودن مدرک تحصیلی</button>
       </div>
       <div className="writings-block">
         {defaults.workHistory.length > 0 && <div className="education-existing"><h3 className="form-subhead">سوابق شغلی ثبت‌شده این پرونده</h3><ul>{defaults.workHistory.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.employer, item.position, item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}

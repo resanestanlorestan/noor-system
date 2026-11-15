@@ -65,14 +65,27 @@ async function loginDbUser(user: { id: string }) {
   await createSession(user.id);
 }
 
-/** مرحلهٔ هویتی + مکانی ویزارد برای کاربر واردشده (بدون caseId = ساخت پروندهٔ تازه). */
-async function createCaseThroughWizard(identity: Record<string, string>) {
+type StagedFile = { key: string; name: string; mime: string; size: number };
+
+/** مرحلهٔ هویتی + مکانی ویزارد برای کاربر واردشده (بدون caseId = ساخت پروندهٔ تازه).
+ *  الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی/حوزوی با مدرک در همان گام هویتی. */
+async function createCaseThroughWizard(identity: Record<string, string>, education?: { university?: { level: string; doc?: StagedFile }; seminary?: { level: string; doc?: StagedFile } }) {
+  const educationRows = [
+    education?.university ? { type: "university", level: education.university.level, field: "", centerName: "", certificate: "", docKey: education.university.doc?.key || "" } : null,
+    education?.seminary ? { type: "seminary", level: education.seminary.level, field: "", centerName: "", certificate: "", docKey: education.seminary.doc?.key || "" } : null,
+  ].filter(Boolean);
+  const educationDocs = [
+    ...(education?.university?.doc ? [{ ...education.university.doc, section: "university" }] : []),
+    ...(education?.seminary?.doc ? [{ ...education.seminary.doc, section: "seminary" }] : []),
+  ];
   const identityData = form({
     caseId: "", dupAck: "yes",
     firstName: identity.firstName, lastName: identity.lastName, fatherName: identity.fatherName,
     nationalId: identity.nationalId, idCardNumber: "123456", idIssuePlace: "تهران",
     birthDate: "1380/05/10", gender: "female",
     phone: identity.phone, alternatePhone: nextMobile("0912"), contactEmail: "",
+    educationRecords: JSON.stringify(educationRows),
+    stagedDocs: JSON.stringify(educationDocs),
   });
   const url = await redirectOf(() => saveIdentityStepAction({}, identityData));
   const caseId = url.split("/cases/")[1]?.split("/")[0] || "";
@@ -112,14 +125,14 @@ describe("الحاقیهٔ ۲.۱۴.۰ — ساخت پرونده در ویزار�
   it("مرحلهٔ ۳ ویزارد: تحصیلات با مدرک، سابقهٔ همکاری، دوره، فعالیت، مدرک حافظ، گواهی تخصص و اجزای حفظ", async () => {
     const user = await registerAccount(nextMobile("0936"), "صاحب");
     await loginDbUser(user);
+    const degree = await stageFile(PDF_BYTES);
+    const seminaryDoc = await stageFile(PDF_BYTES);
     const caseId = await createCaseThroughWizard({
       firstName: "حافظ", lastName: "ویزاردآزمون", fatherName: "پدرِ آزمون",
       nationalId: nationalId(`70001${runSuffix.slice(-3)}1`), phone: nextMobile("0933"),
-    });
+    }, { university: { level: "کارشناسی", doc: degree }, seminary: { level: "سطح ۲", doc: seminaryDoc } });
     const memorizer = (await db.select().from(s.specialties)).find((item) => item.code === "memorizer")!;
     const researcher = (await db.select().from(s.specialties)).find((item) => item.code === "researcher")!;
-    const degree = await stageFile(PDF_BYTES);
-    const seminaryDoc = await stageFile(PDF_BYTES);
     const workDoc = await stageFile(PDF_BYTES);
     const courseDoc = await stageFile(PDF_BYTES);
     const memorizationDoc = await stageFile(PDF_BYTES);
@@ -128,17 +141,11 @@ describe("الحاقیهٔ ۲.۱۴.۰ — ساخت پرونده در ویزار�
       caseId,
       specialties: [String(memorizer.id), String(researcher.id)],
       specialtyDetails: JSON.stringify([{ code: "memorizer", value: "5", juz: "1,2,5,12,20" }]),
-      educationRecords: JSON.stringify([
-        { type: "university", level: "کارشناسی", field: "علوم قرآنی", centerName: "دانشگاه تهران", certificate: "", docKey: degree.key },
-        { type: "seminary", level: "سطح ۲", field: "", centerName: "", certificate: "", docKey: seminaryDoc.key },
-      ]),
       writings: "[]",
       workHistory: JSON.stringify([{ title: "دبیری آموزش و پرورش", employer: "آموزش و پرورش", cooperationType: "fulltime", position: "دبیر", startDate: "1395/01/01", endDate: "", description: "", docKey: workDoc.key }]),
       courses: JSON.stringify([{ title: "دوره تجوید پیشرفته", provider: "کانون نور", field: "tajvid", completedDate: "1402/03/15", hours: "24", docKey: courseDoc.key }]),
       activityRecords: JSON.stringify([{ kind: "teaching", field: "hifz", title: "تدریس حفظ", organization: "خانه قرآن", position: "مربی", startDate: "1400/01/01", endDate: "", description: "" }]),
       stagedDocs: JSON.stringify([
-        { ...degree, section: "education:0" },
-        { ...seminaryDoc, section: "education:1" },
         { ...workDoc, section: "work:0" },
         { ...courseDoc, section: "course:0" },
         { ...memorizationDoc, section: "memorization" },
