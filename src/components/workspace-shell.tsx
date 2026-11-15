@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, Bell, BellRing, BookOpenText, CalendarDays, FileClock, FileText, History, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, FileClock, FileText, History, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { roleLabels, type UserRole } from "@/lib/constants";
@@ -37,6 +37,8 @@ export function WorkspaceShell({ name, role, customRoleLabel, permissions, today
     { href: "/settings", label: "تقسیمات جغرافیایی", icon: MapPinned, allowed: allowed("settings.geo") || allowed("settings.references") },
     { href: "/audit", label: "رویدادهای حساس", icon: History, allowed: allowed("audit.view") },
     { href: "/outbox", label: "صندوق پیام‌ها", icon: Inbox, allowed: allowed("outbox.view") },
+    // الحاقیهٔ ۲.۱۵.۰ — مدیریت API فقط برای مدیر ارشد در منو دیده می‌شود
+    { href: "/dashboard/api-management", label: "مدیریت API", icon: Cable, allowed: role === "super_admin" },
   ];
   // پس‌زمینهٔ تیره همیشه در DOM می‌ماند و فقط با opacity/visibility محو می‌شود؛
   // حذف ناگهانی آن هنگام بستن منو باعث پدیدهٔ «لایهٔ منجمد» و نوار سفید چسبیده در برخی مرورگرهای موبایل می‌شد.
