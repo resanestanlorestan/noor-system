@@ -38,6 +38,17 @@ export async function createStaffAction(_state: ActionState, data: FormData): Pr
   if (role === "province_admin" && countyId) return { error: "محدوده مدیر استانی باید کل استان باشد؛ شهرستان را انتخاب نکنید." };
   const [phoneTaken] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).limit(1);
   if (phoneTaken) return { error: "این شماره موبایل قبلاً برای حساب دیگری ثبت شده است." };
+  // الحاقیهٔ ۲.۱۵.۲ — تخصیص نقش سفارشی هنگام ایجاد کاربر؛ فقط از سوی مدیر ارشد.
+  // نقش بالا مبنای محدودهٔ جغرافیایی می‌ماند و مجوزها در نشست از نقش سفارشی خوانده می‌شود.
+  const rawCustomRole = field(data, "customRoleId", 40);
+  let customRoleId: string | null = null;
+  if (rawCustomRole) {
+    if (actor.effectiveRole !== "super_admin") return { error: "تخصیص نقش سفارشی فقط از سوی مدیر ارشد مجاز است." };
+    if (!isUuid(rawCustomRole)) return { error: "نقش سفارشی انتخاب‌شده معتبر نیست." };
+    const [customRole] = await db.select({ id: customRoles.id }).from(customRoles).where(eq(customRoles.id, rawCustomRole)).limit(1);
+    if (!customRole) return { error: "نقش سفارشی انتخاب‌شده معتبر نیست." };
+    customRoleId = rawCustomRole;
+  }
   const specialtyIds = [...new Set(data.getAll("specialtyIds").map((v) => Number(v)).filter((v) => Number.isSafeInteger(v) && v > 0))];
   if (role === "specialist") {
     if (!specialtyIds.length || specialtyIds.length > 10) return { error: "برای کارشناس تخصصی، حداقل یک حوزه معتبر انتخاب کنید." };
@@ -48,9 +59,9 @@ export async function createStaffAction(_state: ActionState, data: FormData): Pr
     const passwordHash = await hashPassword(password);
     const fullName = normalizeText(`${firstName} ${lastName}`);
     await db.transaction(async (tx) => {
-      const [created] = await tx.insert(users).values({ fullName, firstName, lastName, email: email || null, phone, role, passwordHash, provinceId, countyId }).returning({ id: users.id });
+      const [created] = await tx.insert(users).values({ fullName, firstName, lastName, email: email || null, phone, role, passwordHash, provinceId, countyId, customRoleId }).returning({ id: users.id });
       if (role === "specialist") await tx.insert(userSpecialties).values(specialtyIds.map((specialtyId) => ({ userId: created.id, specialtyId })));
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "create_staff", targetType: "user", targetId: created.id, detail: role });
+      await tx.insert(auditLogs).values({ actorId: actor.id, action: "create_staff", targetType: "user", targetId: created.id, detail: customRoleId ? `${role}|custom:${customRoleId}` : role });
     });
   } catch { return { error: "ایجاد کاربر انجام نشد؛ ممکن است شماره موبایل یا ایمیل تکراری باشد." }; }
   revalidatePath("/users"); redirect("/users?m=" + stashFlash("کاربر با موفقیت ایجاد شد."));
