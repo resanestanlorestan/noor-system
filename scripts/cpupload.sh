@@ -24,5 +24,6 @@ curl -sk --max-time 600 -b "$JAR" \
   "https://${CP_HOST}:2083/${SESS}/execute/Fileman/upload_files" \
   -H 'User-Agent: Mozilla/5.0' \
   -F "dir=${DIR}" \
-  -F "file-1=@${LOCAL};filename=${REMOTE}"
+  -F "file-1=@${LOCAL};filename=${REMOTE}" \
+  -F "overwrite=1"
 echo

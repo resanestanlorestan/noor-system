@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1794744578633,
-      "tag": "0021_release-2150",
+      "when": 1794745800977,
+      "tag": "0021-release-2150-enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794745800978,
+      "tag": "0022-release-2150-tables",
       "breakpoints": true
     }
   ]

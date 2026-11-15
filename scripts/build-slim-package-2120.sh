@@ -14,7 +14,7 @@ cd "$STAGE/noor-system"
 rsync -a --exclude node_modules --exclude .next --exclude .git \
       --exclude .env --exclude .private-app --exclude '*.log' \
       --exclude tsconfig.tsbuildinfo \
-      --exclude upload --exclude download --exclude pgtmp --exclude pgdata --exclude noor-system --exclude skills --exclude tests --exclude scripts-recovered \
+      --exclude upload --exclude download --exclude pgtmp --exclude pgdata --exclude scripts/pg-tools --exclude noor-system --exclude skills --exclude tests --exclude scripts-recovered \
       "$SRC"/ ./
 
 # 2) زمان اجرای standalone (node_modules ردیابی‌شده + سرور کامپایل‌شده)
