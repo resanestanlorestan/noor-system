@@ -92,7 +92,7 @@ export async function requestRevisionAction(data: FormData) {
       const [locked] = await tx.select({ application: applications, person: activists }).from(applications).innerJoin(activists, eq(applications.activistId, activists.id)).where(eq(applications.id, id)).for("update");
       if (!locked || locked.application.status !== "approved") throw new Error("changed");
       const [next] = await tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, id));
-      const [specs, details, writings, docs] = await Promise.all([tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, locked.person.id)), tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, locked.person.id)), tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, locked.person.id)), tx.select({ id: documents.id, title: documents.title }).from(documents).where(eq(documents.applicationId, id))]);
+      const [specs, details, writings, docs] = await Promise.all([tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, locked.person.id)), tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, locked.person.id)), tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, locked.person.id)), tx.select({ id: documents.id, title: documents.title }).from(documents).where(eq(documents.applicationId, id))]);
       await tx.insert(applicationVersions).values({ applicationId: id, version: Number(next.value), snapshot: { profile: locked.person, specialties: specs, specialtyDetails: details, writings, documents: docs, status: "approved" }, reason, createdBy: actor.id });
       await tx.update(applications).set({ status: "needs_correction", updatedAt: new Date() }).where(eq(applications.id, id));
       await tx.insert(statusHistory).values({ applicationId: id, fromStatus: "approved", toStatus: "needs_correction", actorId: actor.id, note: `درخواست بازنگری: ${reason}` });
@@ -179,7 +179,7 @@ export async function restoreVersionAction(data: FormData) {
   if (!row || !(await can(actor, "cases.restore_version")) || !["draft", "completing", "needs_correction"].includes(row.application.status) || !isUuid(versionId)) finish(id, "بازگردانی نسخه در این وضعیت مجاز نیست.");
   const [targetVersion] = await db.select().from(applicationVersions).where(and(eq(applicationVersions.id, versionId), eq(applicationVersions.applicationId, id))).limit(1);
   if (!targetVersion) finish(id, "نسخه موردنظر پیدا نشد.");
-  const snapshot = targetVersion.snapshot as { profile?: Record<string, unknown>; specialties?: { id?: number }[]; specialtyDetails?: { specialtyId?: number; detailValue?: string | null; detailOptions?: string[] | null }[]; writings?: { workType?: string; title?: string; topic?: string | null }[] };
+  const snapshot = targetVersion.snapshot as { profile?: Record<string, unknown>; specialties?: { id?: number }[]; specialtyDetails?: { specialtyId?: number; detailValue?: string | null; detailOptions?: string[] | null; juzParts?: string | null }[]; writings?: { workType?: string; title?: string; topic?: string | null }[] };
   const oldProfile = snapshot.profile;
   if (!oldProfile || typeof oldProfile !== "object") finish(id, "اطلاعات این نسخه قابل بازگردانی نیست.");
   const restoredFields: Record<string, unknown> = {};
@@ -187,7 +187,7 @@ export async function restoreVersionAction(data: FormData) {
   const oldSpecialtyIds = Array.isArray(snapshot.specialties) ? [...new Set(snapshot.specialties.map((item) => item?.id).filter((v): v is number => typeof v === "number"))] : [];
   // (مرحله چهارم) جزئیات تخصص‌ها و آثار مؤلفِ نسخه هدف هم بازگردانی می‌شوند؛
   // ردیف‌هایی که به تخصص حذف‌شده/نامعتبر اشاره کنند نادیده گرفته می‌شوند.
-  const oldDetailRows = Array.isArray(snapshot.specialtyDetails) ? snapshot.specialtyDetails.filter((item): item is { specialtyId: number; detailValue: string | null; detailOptions: string[] | null } => typeof item?.specialtyId === "number").map((item) => ({ specialtyId: item.specialtyId, detailValue: item.detailValue ?? null, detailOptions: item.detailOptions ?? null })) : [];
+  const oldDetailRows = Array.isArray(snapshot.specialtyDetails) ? snapshot.specialtyDetails.filter((item): item is { specialtyId: number; detailValue: string | null; detailOptions: string[] | null; juzParts?: string | null } => typeof item?.specialtyId === "number").map((item) => ({ specialtyId: item.specialtyId, detailValue: item.detailValue ?? null, detailOptions: item.detailOptions ?? null, juzParts: item.juzParts ?? null })) : [];
   const oldWritingRows = Array.isArray(snapshot.writings) ? snapshot.writings.filter((item) => (item?.workType === "book" || item?.workType === "article") && typeof item?.title === "string" && item.title.length >= 2).map((item) => ({ workType: item.workType as "book" | "article", title: item.title as string, topic: typeof item.topic === "string" ? item.topic : null })) : [];
   try {
     await db.transaction(async (tx) => {
@@ -196,7 +196,7 @@ export async function restoreVersionAction(data: FormData) {
       const validSpecialtyIds = oldSpecialtyIds.length ? (await tx.select({ id: specialties.id }).from(specialties).where(inArray(specialties.id, oldSpecialtyIds))).map((item) => item.id) : [];
       const [currentSpecialties, currentDetails, currentWritings, currentDocuments, next] = await Promise.all([
         tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, locked.activist.id)),
-        tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, locked.activist.id)),
+        tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, locked.activist.id)),
         tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, locked.activist.id)),
         tx.select({ id: documents.id, title: documents.title }).from(documents).where(eq(documents.applicationId, id)),
         tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, id)),
@@ -208,7 +208,7 @@ export async function restoreVersionAction(data: FormData) {
       await tx.delete(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, locked.activist.id));
       const validDetailIds = new Set(validSpecialtyIds);
       const restoredDetails = oldDetailRows.filter((row) => validDetailIds.has(row.specialtyId));
-      if (restoredDetails.length) await tx.insert(activistSpecialtyDetails).values(restoredDetails.map((row) => ({ activistId: locked.activist.id, specialtyId: row.specialtyId, detailValue: row.detailValue, detailOptions: row.detailOptions })));
+      if (restoredDetails.length) await tx.insert(activistSpecialtyDetails).values(restoredDetails.map((row) => ({ activistId: locked.activist.id, specialtyId: row.specialtyId, detailValue: row.detailValue, detailOptions: row.detailOptions, juzParts: row.juzParts ?? null })));
       await tx.delete(activistWritings).where(eq(activistWritings.activistId, locked.activist.id));
       if (oldWritingRows.length) await tx.insert(activistWritings).values(oldWritingRows.map((row) => ({ ...row, activistId: locked.activist.id, createdBy: actor.id })));
       await tx.update(applications).set({ updatedAt: new Date() }).where(eq(applications.id, id));

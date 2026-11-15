@@ -68,7 +68,7 @@ export async function GET(request: Request) {
         const seminaryText = educationFor.filter((item) => item.type === "seminary").map((item) => [item.level, item.field, item.centerName, item.certificate].filter(Boolean).join(" — ")).join(" | ") || (row.seminaryLevel || "");
         const specialtyFull = details.specialtyDetails.filter((item) => item.activistId === row.activistId)
           .map((item) => {
-            const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions);
+            const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts);
             return detail ? `${item.title}: ${detail}` : item.title;
           }).join(" | ");
         const memorizationText = details.specialtyDetails.find((item) => item.activistId === row.activistId && item.code === "memorizer");
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
           value(row.phone), value(row.alternatePhone), value(row.email), value(row.province), value(row.county), value(row.city), value(row.postalCode), value(row.address),
           value(row.activityProvince), value(row.activityCounty), value(row.activityPlace), value(row.organization), value(row.job),
           value(universityText), value(seminaryText),
-          value(memorizationText ? formatSpecialtyDetail("memorizer", memorizationText.detailValue, memorizationText.detailOptions) : null),
+          value(memorizationText ? formatSpecialtyDetail("memorizer", memorizationText.detailValue, memorizationText.detailOptions, memorizationText.juzParts) : null),
           value(faOption(memorizationCertTypeOptions, row.memorizationCertType)),
           value(specialtyFull),
           value(workText), value(courseText), value(activityText), value(writingsText), value(certificateText),

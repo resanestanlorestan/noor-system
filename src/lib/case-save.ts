@@ -179,7 +179,7 @@ export async function saveCaseCore(data: FormData): Promise<ActionState> {
         const [previous] = await tx.select().from(activists).where(eq(activists.id, existing.activist.id)).limit(1);
         const [oldSpecialties, oldDetails, oldWritings, oldDocuments, next] = await Promise.all([
           tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, existing.activist.id)),
-          tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, existing.activist.id)),
+          tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, existing.activist.id)),
           tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, existing.activist.id)),
           tx.select({ id: documents.id, title: documents.title }).from(documents).where(eq(documents.applicationId, existing.application.id)),
           tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, existing.application.id)),
@@ -191,7 +191,7 @@ export async function saveCaseCore(data: FormData): Promise<ActionState> {
         await tx.delete(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, existing.activist.id));
         if (detailRows.length) {
           const codeToId = new Map(found.map((row) => [row.code, row.id]));
-          await tx.insert(activistSpecialtyDetails).values(detailRows.map((row) => ({ activistId: existing.activist.id, specialtyId: codeToId.get(row.code)!, detailValue: row.value, detailOptions: row.options })));
+          await tx.insert(activistSpecialtyDetails).values(detailRows.map((row) => ({ activistId: existing.activist.id, specialtyId: codeToId.get(row.code)!, detailValue: row.value, detailOptions: row.options, juzParts: row.juz })));
         }
         if (writingRows.length) await tx.insert(activistWritings).values(writingRows.map((row) => ({ ...row, activistId: existing.activist.id, createdBy: user.id })));
         if (educationRows.length) await tx.insert(educationRecords).values(educationRows.map((row) => ({ ...row, activistId: existing.activist.id, createdBy: user.id })));
@@ -206,7 +206,7 @@ export async function saveCaseCore(data: FormData): Promise<ActionState> {
       if (chosen.length) await tx.insert(activistSpecialties).values(chosen.map((specialtyId) => ({ activistId: person.id, specialtyId })));
       if (detailRows.length) {
         const codeToId = new Map(found.map((row) => [row.code, row.id]));
-        await tx.insert(activistSpecialtyDetails).values(detailRows.map((row) => ({ activistId: person.id, specialtyId: codeToId.get(row.code)!, detailValue: row.value, detailOptions: row.options })));
+        await tx.insert(activistSpecialtyDetails).values(detailRows.map((row) => ({ activistId: person.id, specialtyId: codeToId.get(row.code)!, detailValue: row.value, detailOptions: row.options, juzParts: row.juz })));
       }
       if (writingRows.length) await tx.insert(activistWritings).values(writingRows.map((row) => ({ ...row, activistId: person.id, createdBy: user.id })));
       if (educationRows.length) await tx.insert(educationRecords).values(educationRows.map((row) => ({ ...row, activistId: person.id, createdBy: user.id })));

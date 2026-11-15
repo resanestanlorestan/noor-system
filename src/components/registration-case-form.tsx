@@ -14,6 +14,7 @@ import { CheckCircle2, FileUp, LoaderCircle, Plus, Save, Trash2, X } from "lucid
 import { registerCaseAction } from "@/app/actions/register-case";
 import { initialActionState } from "@/lib/action-state";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
+import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal";
 import {
   activityRecordKindLabels, courseFieldOptions, cooperationTypeOptions,
   educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions,
@@ -96,6 +97,9 @@ export function RegisterCaseForm({ provinces, counties, specialties }: { provinc
   const [activityCountyId, setActivityCountyId] = useState("");
   const [selectedSpecialties, setSelectedSpecialties] = useState<Set<number>>(new Set());
   const [detailState, setDetailState] = useState<Record<number, DetailState>>({});
+  // الحاقیهٔ ۲.۱۳.۰ — اجزای دقیق حفظ (به تفکیک تخصص «حافظ») + پنجرهٔ انتخاب
+  const [juzParts, setJuzParts] = useState<Record<number, number[]>>({});
+  const [juzModal, setJuzModal] = useState<{ id: number; count: number } | null>(null);
   const [memorizationCertType, setMemorizationCertType] = useState("");
   const [certSlots, setCertSlots] = useState<Record<number, DocSlot[]>>({}); // گواهی تخصص per specialty id
   const [education, setEducation] = useState<{ university: EducationCard; seminary: EducationCard }>({ university: { ...emptyEducationCard }, seminary: { ...emptyEducationCard } });
@@ -126,16 +130,38 @@ export function RegisterCaseForm({ provinces, counties, specialties }: { provinc
 
   const authorSpecialty = specialties.find((item) => item.code === "author");
 
+  /* --------- الحاقیهٔ ۲.۱۳.۰ — انتخاب تعاملی اجزای حفظ قرآن --------- */
+  const setJuzValue = (id: number, value: string) => {
+    setDetailValue(id, value);
+    if (!value) { setJuzParts((current) => ({ ...current, [id]: [] })); return; }
+    if (value === "complete") {
+      // «حفظ کل قرآن»: هر ۳۰ جزء خودکار انتخاب می‌شود
+      setJuzParts((current) => ({ ...current, [id]: Array.from({ length: 30 }, (_, index) => index + 1) }));
+      return;
+    }
+    const count = Number(value);
+    setJuzParts((current) => ({ ...current, [id]: (current[id] || []).slice(0, count) }));
+    // بلافاصله پس از ثبت تعداد، پنجرهٔ انتخاب اجزا باز می‌شود
+    setJuzModal({ id, count });
+  };
+
   /* --------- بارنامهٔ نهایی: همهٔ بخش‌ها به فیلدهای مخفی JSON --------- */
   const specialtyDetailsPayload = specialties
     .filter((item) => {
       const spec = specialtyDetailSpec[item.code];
       return selectedSpecialties.has(item.id) && spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist");
     })
-    .map((item): { code: string; value?: string; options?: string[] } | null => {
+    .map((item): { code: string; value?: string; options?: string[]; juz?: string } | null => {
       const spec = specialtyDetailSpec[item.code]; const detail = detailFor(item.id);
       if (spec.kind === "checklist") return detail.options.length ? { code: item.code, options: detail.options } : null;
-      return detail.value ? { code: item.code, value: detail.value } : null;
+      if (!detail.value) return null;
+      if (spec.kind === "juz") {
+        const parts = juzParts[item.id] || [];
+        // بدون تأیید پنجرهٔ انتخاب اجزا، ردیف حافظ ارسال نمی‌شود
+        if (!parts.length) return null;
+        return { code: item.code, value: detail.value, juz: parts.join(",") };
+      }
+      return { code: item.code, value: detail.value };
     })
     .filter((row) => row !== null);
   const specialtyCertKeysPayload = specialties
@@ -241,7 +267,12 @@ export function RegisterCaseForm({ provinces, counties, specialties }: { provinc
         const spec = specialtyDetailSpec[item.code]; const detail = detailFor(item.id);
         return <div className="specialty-detail" key={`detail-${item.id}`}>
           <div className="specialty-detail-head"><strong>{item.title}</strong><small>{spec.hint}</small></div>
-          {(spec.kind === "juz" || spec.kind === "level") && <label className="specialty-detail-select"><span>{spec.kind === "juz" ? "میزان حفظ" : "سطح قرائت"}</span><select value={detail.value} onChange={(event) => setDetailValue(item.id, event.target.value)}><option value="">انتخاب کنید</option>{Object.entries(spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
+          {(spec.kind === "juz" || spec.kind === "level") && <label className="specialty-detail-select"><span>{spec.kind === "juz" ? "میزان حفظ" : "سطح قرائت"}</span><select value={detail.value} onChange={(event) => (spec.kind === "juz" ? setJuzValue(item.id, event.target.value) : setDetailValue(item.id, event.target.value))}><option value="">انتخاب کنید</option>{Object.entries(spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
+          {/* الحاقیهٔ ۲.۱۳.۰ — خلاصهٔ اجزای منتخب + ویرایش آن‌ها */}
+          {spec.kind === "juz" && detail.value && <div className="juz-parts-line">
+            <span className="juz-parts-value">{juzParts[item.id]?.length ? `اجزای منتخب: ${juzPartsSummaryFa(juzParts[item.id])}` : "جزءها هنوز انتخاب نشده‌اند"}</span>
+            <button type="button" onClick={() => setJuzModal({ id: item.id, count: detail.value === "complete" ? 30 : Number(detail.value) })}>{juzParts[item.id]?.length ? "ویرایش اجزا" : "انتخاب اجزا"}</button>
+          </div>}
           {spec.kind === "checklist" && spec.options && <div className="check-list">{Object.entries(spec.options).map(([key, label]) => <label key={key} className={detail.options.includes(key) ? "checked" : ""}><input type="checkbox" checked={detail.options.includes(key)} onChange={() => toggleDetailOption(item.id, key)} /><span>{label}</span></label>)}</div>}
           {/* الحاقیهٔ ۲.۱۲.۰ — بخش اختصاصی حافظ قرآن: نوع مدرک + بارگذاری گواهی */}
           {item.code === "memorizer" && <div className="memorizer-block">
@@ -339,5 +370,13 @@ export function RegisterCaseForm({ provinces, counties, specialties }: { provinc
       <div><Link className="secondary-button" href="/login">قبلاً حساب دارم؛ ورود</Link></div>
       <div><button className="primary-button" disabled={pending}>{pending ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />} ثبت نهایی و ارسال برای بررسی</button></div>
     </div>
+    {juzModal && <JuzPickerModal
+      key={`${juzModal.id}:${juzModal.count}`}
+      open
+      count={juzModal.count}
+      initial={juzParts[juzModal.id] || []}
+      onConfirm={(parts) => { setJuzParts((current) => ({ ...current, [juzModal.id]: parts })); setJuzModal(null); }}
+      onCancel={() => setJuzModal(null)}
+    />}
   </form>;
 }

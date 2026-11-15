@@ -134,7 +134,7 @@ export async function loadExportDetails(rows: ExportCaseRow[]) {
     db.select().from(certificatesTable).where(inArray(certificatesTable.activistId, activistIds)),
     db.select({ applicationId: documents.applicationId, title: documents.title, docType: documents.docType, originalName: documents.originalName, size: documents.size, createdAt: documents.createdAt, activistId: applications.activistId })
       .from(documents).innerJoin(applications, eq(documents.applicationId, applications.id)).where(inArray(documents.applicationId, applicationIds)),
-    db.select({ activistId: activistSpecialties.activistId, code: specialties.code, title: specialties.title, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions })
+    db.select({ activistId: activistSpecialties.activistId, code: specialties.code, title: specialties.title, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts })
       .from(activistSpecialties).innerJoin(specialties, eq(specialties.id, activistSpecialties.specialtyId))
       .leftJoin(activistSpecialtyDetails, and(eq(activistSpecialtyDetails.specialtyId, activistSpecialties.specialtyId), eq(activistSpecialtyDetails.activistId, activistSpecialties.activistId)))
       .where(inArray(activistSpecialties.activistId, activistIds)),

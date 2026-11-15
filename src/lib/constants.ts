@@ -147,12 +147,20 @@ export const specialtyDetailSpec: Record<string, { kind: SpecialtyDetailKind; op
  *  detail page, the printable dossier and (later) the Excel export.
  *  الحاقیهٔ ۲.۱۲.۰: کلیدهای حذف‌شده از فهرست‌های انتخاب (قصه‌های قرآنی، علوم
  *  قرآنی و…) با برچسب‌های legacy نمایش داده می‌شوند تا دادهٔ قدیمی گم نشود. */
-export function formatSpecialtyDetail(code: string, detailValue: string | null, detailOptions: string[] | null): string | null {
+export function formatSpecialtyDetail(code: string, detailValue: string | null, detailOptions: string[] | null, juzParts?: string | null): string | null {
   const spec = specialtyDetailSpec[code];
   if (!spec) return null;
   if (spec.kind === "juz" || spec.kind === "level") {
     const options = spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions;
-    return detailValue && detailValue in options ? options[detailValue] : null;
+    if (!detailValue || !(detailValue in options)) return null;
+    // الحاقیهٔ ۲.۱۳.۰ — شمارهٔ دقیق جزءهای حفظ‌شده کنار میزان حفظ نمایش داده می‌شود
+    // (فقط وقتی تعداد اجزا با میزان اعلام‌شده هم‌خوان است)
+    if (spec.kind === "juz" && juzParts) {
+      const parsed = parseJuzNumbers(juzParts);
+      const matches = parsed && (detailValue === "complete" ? parsed.length === 30 : parsed.length === Number(detailValue));
+      if (matches) return `${options[detailValue]} (${juzPartsFa(juzParts)})`;
+    }
+    return options[detailValue];
   }
   if (spec.kind === "checklist" && spec.options) {
     const legacy = code === "trainer" ? legacyTeacherSubjectLabels : code === "teacher" ? legacyModarresFieldLabels : {};
@@ -160,6 +168,48 @@ export function formatSpecialtyDetail(code: string, detailValue: string | null, 
     return chosen.length ? chosen.join("، ") : null;
   }
   return null;
+}
+
+/* ---------------- الحاقیهٔ ۲.۱۳.۰ — اجزای دقیق حفظ قرآن ---------------- */
+
+/** تبدیل "1,2,5" به «۱، ۲، ۵»؛ حفظ کل (۳۰ جزء) به‌صورت «۱ تا ۳۰»؛ ورودی نامعتبر یا خالی → null. */
+export function juzPartsFa(parts: string | null | undefined): string | null {
+  const parsed = parseJuzNumbers(parts);
+  if (!parsed) return null;
+  if (parsed.length === 30) return "۱ تا ۳۰";
+  return parsed.map((value) => faDigitOf(value)).join("، ");
+}
+
+/** تجزیهٔ رشتهٔ اجزا به اعداد مرتب؛ هر نقض (تکراری/خارج از ۱..۳۰/غیرعددی) → null. */
+export function parseJuzNumbers(parts: string | null | undefined): number[] | null {
+  if (!parts) return null;
+  const tokens = String(parts).split(",").map((token) => token.trim()).filter(Boolean);
+  if (!tokens.length) return null;
+  const numbers: number[] = [];
+  for (const token of tokens) {
+    if (!/^\d{1,2}$/.test(token)) return null;
+    const value = Number(token);
+    if (value < 1 || value > 30) return null;
+    numbers.push(value);
+  }
+  if (new Set(numbers).size !== numbers.length) return null;
+  return [...new Set(numbers)].sort((a, b) => a - b);
+}
+
+/**
+ * اعتبارسنجی و نرمال‌سازی اجزای حفظ در برابر میزان اعلام‌شده (الحاقیهٔ ۲.۱۳.۰).
+ *  • value عددی N → دقیقاً N جزء یکتا در بازهٔ ۱..۳۰ (خروجی مرتب "1,2,5")
+ *  • value "complete" → همهٔ ۳۰ جزء خودکار ثبت می‌شود
+ *  • parts ارسال‌نشده → null (سازگار با داده‌های قدیمی)؛ نقض قواعد → "invalid"
+ */
+export function normalizeJuzParts(value: string, parts: string | null | undefined): string | null | "invalid" {
+  if (value === "complete") return Array.from({ length: 30 }, (_, index) => index + 1).join(",");
+  if (!parts || !String(parts).trim()) return null;
+  const parsed = parseJuzNumbers(parts);
+  if (!parsed) return "invalid";
+  const declared = Number(value);
+  if (!Number.isSafeInteger(declared) || parsed.length !== declared) return "invalid";
+  return parsed.join(",");
 }
 export const documentTypeLabels = {
   national_card: "کارت ملی", birth_certificate_page: "صفحه شناسنامه", degree: "مدرک تحصیلی",

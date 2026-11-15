@@ -60,7 +60,7 @@ async function patchActivist(
     const [previous] = await tx.select().from(activists).where(eq(activists.id, row.activist.id)).limit(1);
     const [oldSpecialties, oldDetails, oldWritings, next] = await Promise.all([
       tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id)),
-      tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id)),
+      tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id)),
       tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, row.activist.id)),
       tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, row.application.id)),
     ]);
@@ -289,7 +289,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
       const [previous] = await tx.select().from(activists).where(eq(activists.id, row.activist.id)).limit(1);
       const [oldSpecialties, oldDetails, oldWritings, next] = await Promise.all([
         tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id)),
-        tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id)),
+        tx.select({ specialtyId: activistSpecialtyDetails.specialtyId, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id)),
         tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, row.activist.id)),
         tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, row.application.id)),
       ]);
@@ -300,7 +300,8 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
       await tx.delete(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id));
       if (detailRows.length) {
         const codeToId = new Map(found.map((item) => [item.code, item.id]));
-        await tx.insert(activistSpecialtyDetails).values(detailRows.map((item) => ({ activistId: row.activist.id, specialtyId: codeToId.get(item.code)!, detailValue: item.value, detailOptions: item.options })));
+        // الحاقیهٔ ۲.۱۳.۰ — ذخیرهٔ اجزای دقیق حفظ در گام تخصص‌های ویزارد
+        await tx.insert(activistSpecialtyDetails).values(detailRows.map((item) => ({ activistId: row.activist.id, specialtyId: codeToId.get(item.code)!, detailValue: item.value, detailOptions: item.options, juzParts: item.juz })));
       }
       if (writingRows.length) await tx.insert(activistWritings).values(writingRows.map((item) => ({ ...item, activistId: row.activist.id, createdBy: user.id })));
       if (educationRows.length) await tx.insert(educationRecords).values(educationRows.map((item) => ({ ...item, activistId: row.activist.id, createdBy: user.id })));

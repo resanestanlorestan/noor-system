@@ -6,7 +6,7 @@
 // Server Action endpoint.
 
 import { jalaliToIso, normalizeText } from "@/lib/format";
-import { educationLevelOptions, educationTypeLabels, hafizJuzOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
+import { educationLevelOptions, educationTypeLabels, hafizJuzOptions, normalizeJuzParts, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
 
 export const field = (data: FormData, key: string, max = 200) => normalizeText(String(data.get(key) || "")).slice(0, max);
 export const numeric = (value: string) => /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
@@ -42,17 +42,19 @@ export function parseEducationInput(data: FormData): Array<{ type: EducationType
 }
 
 /** Parses the specialty-details JSON posted by the profile form:
- *  [{ code, value?, options? }] for checked specialties that carry structured
- *  data — memorizer juz range ("1".."30"/"complete"), reciter level ("4".."7")
- *  and the checklist specialties. Unknown codes, values outside the spec or an
- *  empty checklist abort the save. Author works use parseWritingsInput. */
-export function parseSpecialtyDetailsInput(data: FormData): Array<{ code: string; value: string | null; options: string[] | null }> {
+ *  [{ code, value?, options?, juz? }] for checked specialties that carry
+ *  structured data — memorizer juz range ("1".."30"/"complete") plus the exact
+ *  memorized part numbers (الحاقیهٔ ۲.۱۳.۰), reciter level ("4".."7") and the
+ *  checklist specialties. Unknown codes, values outside the spec, a mismatched
+ *  juz-part count or an empty checklist abort the save. Author works use
+ *  parseWritingsInput. */
+export function parseSpecialtyDetailsInput(data: FormData): Array<{ code: string; value: string | null; options: string[] | null; juz: string | null }> {
   const raw = String(data.get("specialtyDetails") || "").slice(0, 20000);
   if (!raw) return [];
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error("invalid-specialty-details"); }
   if (!Array.isArray(parsed)) throw new Error("invalid-specialty-details");
-  const rows: Array<{ code: string; value: string | null; options: string[] | null }> = [];
+  const rows: Array<{ code: string; value: string | null; options: string[] | null; juz: string | null }> = [];
   for (const item of parsed.slice(0, 20)) {
     if (typeof item !== "object" || item === null) throw new Error("invalid-specialty-details");
     const record = item as Record<string, unknown>;
@@ -64,14 +66,21 @@ export function parseSpecialtyDetailsInput(data: FormData): Array<{ code: string
       const value = String(record.value || "");
       const allowed = spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions;
       if (!(value in allowed)) throw new Error("invalid-specialty-details");
-      rows.push({ code, value, options: null });
+      // الحاقیهٔ ۲.۱۳.۰ — شمارهٔ دقیق جزءهای حفظ: با میزان اعلام‌شده باید هم‌خوان باشد
+      let juz: string | null = null;
+      if (spec.kind === "juz") {
+        const normalized = normalizeJuzParts(value, typeof record.juz === "string" ? record.juz.slice(0, 120) : null);
+        if (normalized === "invalid") throw new Error("invalid-specialty-details");
+        juz = normalized;
+      }
+      rows.push({ code, value, options: null, juz });
       continue;
     }
     const specOptions = spec.options ?? {};
     const rawOptions = Array.isArray(record.options) ? record.options : [];
     const options = [...new Set(rawOptions.map((option) => String(option)).filter((option) => option in specOptions))];
     if (!options.length) throw new Error("invalid-specialty-details");
-    rows.push({ code, value: null, options });
+    rows.push({ code, value: null, options, juz: null });
   }
   return rows;
 }

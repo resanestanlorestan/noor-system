@@ -83,7 +83,8 @@ async function buildFormData(nationalIdValue: string, mobile: string, marker: st
     notes: "",
     memorizationCertType: "specialized",
     specialties: [String(memorizer.id), String(researcher.id)],
-    specialtyDetails: JSON.stringify([{ code: "memorizer", value: "3" }]),
+    // الحاقیهٔ ۲.۱۳.۰ — ثبت‌نام عمومی نیازمند تأیید پنجرهٔ اجزای حفظ است
+    specialtyDetails: JSON.stringify([{ code: "memorizer", value: "3", juz: "1,2,3" }]),
     specialtyCertKeys: "[]",
     education: JSON.stringify([
       {

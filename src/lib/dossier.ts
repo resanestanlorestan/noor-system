@@ -50,7 +50,7 @@ export async function loadDossier(user: AppUser, caseId: string): Promise<Dossie
   if (!row) return null;
   const { application: app, activist: person } = row;
   const [specialtyRows, writingRows, activityRows, courseRows, certificateRows, organizationRows, documentRows, historyRows, provinceRows, countyRows, activityProvinceRows, activityCountyRows, educationRows, workHistoryRows] = await Promise.all([
-    db.select({ id: specialties.id, title: specialties.title, code: specialties.code, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions }).from(activistSpecialties).innerJoin(specialties, eq(activistSpecialties.specialtyId, specialties.id)).leftJoin(activistSpecialtyDetails, and(eq(activistSpecialtyDetails.specialtyId, activistSpecialties.specialtyId), eq(activistSpecialtyDetails.activistId, activistSpecialties.activistId))).where(eq(activistSpecialties.activistId, person.id)),
+    db.select({ id: specialties.id, title: specialties.title, code: specialties.code, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialties).innerJoin(specialties, eq(activistSpecialties.specialtyId, specialties.id)).leftJoin(activistSpecialtyDetails, and(eq(activistSpecialtyDetails.specialtyId, activistSpecialties.specialtyId), eq(activistSpecialtyDetails.activistId, activistSpecialties.activistId))).where(eq(activistSpecialties.activistId, person.id)),
     db.select({ id: activistWritings.id, workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, person.id)).orderBy(desc(activistWritings.createdAt)),
     db.select().from(activityRecords).where(eq(activityRecords.activistId, person.id)).orderBy(desc(activityRecords.startDate)),
     db.select().from(educationalCourses).where(eq(educationalCourses.activistId, person.id)).orderBy(desc(educationalCourses.completedDate)),
@@ -83,7 +83,7 @@ export async function loadDossier(user: AppUser, caseId: string): Promise<Dossie
     person,
     specialtyTitles: specialtyRows.map((item) => item.title),
     specialtyDetailLines: specialtyRows
-      .map((item) => ({ id: String(item.id), title: item.title, detail: formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions) || "" }))
+      .map((item) => ({ id: String(item.id), title: item.title, detail: formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts) || "" }))
       .filter((item) => item.detail),
     writings: writingRows.map((item) => ({ id: item.id, main: item.title, extra: [writingTypeLabels[item.workType], item.topic ? `موضوع: ${item.topic}` : null].filter(Boolean).join(" · "), kindLabel: null, period: dash })),
     provinceName: provinceRows[0]?.name ?? null, countyName: countyRows[0]?.name ?? null,

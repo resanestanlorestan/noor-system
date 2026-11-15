@@ -14,6 +14,7 @@ import { initialActionState, type ActionState } from "@/lib/action-state";
 import { isoToJalali } from "@/lib/format";
 import { educationLevelOptions, educationTypeLabels, cooperationTypeOptions, hafizJuzOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
+import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
@@ -21,7 +22,7 @@ type Province = { id: number; name: string };
 type County = { id: number; name: string; provinceId: number };
 type Specialty = { id: number; title: string; code: string };
 export type StepExistingEducation = { id: string; typeLabel: string; level: string; field: string | null; centerName: string | null; certificate: string | null };
-export type StepExistingSpecialtyDetail = { specialtyId: number; code: string; detailValue: string | null; detailOptions: string[] | null };
+export type StepExistingSpecialtyDetail = { specialtyId: number; code: string; detailValue: string | null; detailOptions: string[] | null; juzParts?: string | null };
 export type StepExistingWriting = { id: string; workTypeLabel: string; title: string; topic: string | null };
 export type StepExistingWorkHistory = { id: string; title: string; employer: string | null; position: string | null; startDate: string | null; endDate: string | null; description: string | null };
 
@@ -156,6 +157,18 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     for (const item of defaults.specialtyDetails) map[item.specialtyId] = { value: item.detailValue || "", options: item.detailOptions || [] };
     return map;
   });
+  // الحاقیهٔ ۲.۱۳.۰ — اجزای دقیق حفظ (از دادهٔ موجود برای ویرایش) + پنجرهٔ انتخاب
+  const [juzParts, setJuzParts] = useState<Record<number, number[]>>(() => {
+    const map: Record<number, number[]> = {};
+    for (const item of defaults.specialtyDetails) {
+      if (item.code === "memorizer" && item.juzParts) {
+        const parsed = item.juzParts.split(",").map((token) => Number(token.trim())).filter((value) => Number.isSafeInteger(value) && value >= 1 && value <= 30);
+        if (parsed.length) map[item.specialtyId] = parsed;
+      }
+    }
+    return map;
+  });
+  const [juzModal, setJuzModal] = useState<{ id: number; count: number } | null>(null);
   const [writingRows, setWritingRows] = useState<WritingRow[]>([]);
   const [educationRows, setEducationRows] = useState<EducationRow[]>([]);
   const [workRows, setWorkRows] = useState<WorkRow[]>([]);
@@ -164,6 +177,18 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
   const toggleSpecialty = (id: number) => setSelectedSpecialties((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const detailFor = (id: number): DetailState => specialtyDetailState[id] || { value: "", options: [] };
   const setDetailValue = (id: number, value: string) => setSpecialtyDetailState((current) => ({ ...current, [id]: { ...detailFor(id), value } }));
+  /* الحاقیهٔ ۲.۱۳.۰ — انتخاب تعاملی اجزای حفظ: بعد از اعلام تعداد، پنجرهٔ انتخاب باز می‌شود */
+  const setJuzValue = (id: number, value: string) => {
+    setDetailValue(id, value);
+    if (!value) { setJuzParts((current) => ({ ...current, [id]: [] })); return; }
+    if (value === "complete") {
+      setJuzParts((current) => ({ ...current, [id]: Array.from({ length: 30 }, (_, index) => index + 1) }));
+      return;
+    }
+    const count = Number(value);
+    setJuzParts((current) => ({ ...current, [id]: (current[id] || []).slice(0, count) }));
+    setJuzModal({ id, count });
+  };
   const toggleDetailOption = (id: number, option: string) => setSpecialtyDetailState((current) => {
     const detail = detailFor(id); const options = new Set(detail.options);
     if (options.has(option)) options.delete(option); else options.add(option);
@@ -187,10 +212,16 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       const spec = specialtyDetailSpec[item.code];
       return selectedSpecialties.has(item.id) && spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist");
     })
-    .map((item): { code: string; value?: string; options?: string[] } | null => {
+    .map((item): { code: string; value?: string; options?: string[]; juz?: string } | null => {
       const spec = specialtyDetailSpec[item.code]; const detail = detailFor(item.id);
       if (spec.kind === "checklist") return detail.options.length ? { code: item.code, options: detail.options } : null;
-      return detail.value ? { code: item.code, value: detail.value } : null;
+      if (!detail.value) return null;
+      // الحاقیهٔ ۲.۱۳.۰ — اجزای دقیق حفظ؛ دادهٔ قدیمی بدون اجزا بدون juz ارسال می‌شود
+      if (spec.kind === "juz") {
+        const parts = juzParts[item.id] || [];
+        return { code: item.code, value: detail.value, ...(parts.length ? { juz: parts.join(",") } : {}) };
+      }
+      return { code: item.code, value: detail.value };
     })
     .filter((row) => row !== null);
   const writingsPayload = authorSelected ? writingRows.filter((row) => row.workType && row.title.trim().length >= 2) : [];
@@ -212,7 +243,12 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
         const spec = specialtyDetailSpec[item.code]; const detail = detailFor(item.id);
         return <div className="specialty-detail" key={`detail-${item.id}`}>
           <div className="specialty-detail-head"><strong>{item.title}</strong><small>{spec.hint}</small></div>
-          {(spec.kind === "juz" || spec.kind === "level") && <label className="specialty-detail-select"><span>{spec.kind === "juz" ? "میزان حفظ" : "سطح قرائت"}</span><select value={detail.value} onChange={(event) => setDetailValue(item.id, event.target.value)}><option value="">انتخاب کنید</option>{Object.entries(spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
+          {(spec.kind === "juz" || spec.kind === "level") && <label className="specialty-detail-select"><span>{spec.kind === "juz" ? "میزان حفظ" : "سطح قرائت"}</span><select value={detail.value} onChange={(event) => (spec.kind === "juz" ? setJuzValue(item.id, event.target.value) : setDetailValue(item.id, event.target.value))}><option value="">انتخاب کنید</option>{Object.entries(spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
+          {/* الحاقیهٔ ۲.۱۳.۰ — خلاصهٔ اجزای منتخب + ویرایش */}
+          {spec.kind === "juz" && detail.value && <div className="juz-parts-line">
+            <span className="juz-parts-value">{juzParts[item.id]?.length ? `اجزای منتخب: ${juzPartsSummaryFa(juzParts[item.id])}` : "جزءها هنوز انتخاب نشده‌اند"}</span>
+            <button type="button" onClick={() => setJuzModal({ id: item.id, count: detail.value === "complete" ? 30 : Number(detail.value) })}>{juzParts[item.id]?.length ? "ویرایش اجزا" : "انتخاب اجزا"}</button>
+          </div>}
           {spec.kind === "checklist" && spec.options && <div className="check-list">{Object.entries(spec.options).map(([key, label]) => <label key={key} className={detail.options.includes(key) ? "checked" : ""}><input type="checkbox" checked={detail.options.includes(key)} onChange={() => toggleDetailOption(item.id, key)} /><span>{label}</span></label>)}</div>}
         </div>;
       })}
@@ -250,5 +286,13 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     </section>
     <ChangeReasonField required={Boolean(needsChangeReason)} />
     <StepFooter pending={pending} previousHref={`/cases/${caseId}/steps/2`} submitLabel="ذخیره و ادامه به مرحلهٔ مدارک" />
+    {juzModal && <JuzPickerModal
+      key={`${juzModal.id}:${juzModal.count}`}
+      open
+      count={juzModal.count}
+      initial={juzParts[juzModal.id] || []}
+      onConfirm={(parts) => { setJuzParts((current) => ({ ...current, [juzModal.id]: parts })); setJuzModal(null); }}
+      onCancel={() => setJuzModal(null)}
+    />}
   </form>;
 }

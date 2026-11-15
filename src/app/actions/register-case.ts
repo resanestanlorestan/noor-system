@@ -24,7 +24,7 @@ import { issueMobileVerification, issuePendingVerificationToken } from "@/lib/mo
 import { normalizeIranMobile, deliverOutbox, mobileVerificationSms, queueSms, smsProvider, notifyUsers } from "@/lib/messaging";
 import { validEmailFormat, validIranMobile, validPasswordFormat, PASSWORD_POLICY_ERROR } from "@/lib/validation";
 import { jalaliToIso, normalizeDigits, normalizeText, validIdCardNumber, validNationalId, validPostalCode } from "@/lib/format";
-import { courseFieldOptions, cooperationTypeOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions, recitationLevelOptions, specialtyDetailSpec, activityRecordKindLabels, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
+import { courseFieldOptions, cooperationTypeOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions, normalizeJuzParts, recitationLevelOptions, specialtyDetailSpec, activityRecordKindLabels, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
 import { protectNationalId, privateDir } from "@/lib/local-secrets";
 import { resolveSmsTemplate } from "@/lib/sms-admin";
 import { managerInScope } from "@/lib/workflow-utils";
@@ -106,7 +106,24 @@ export async function registerCaseAction(_state: ActionState, data: FormData): P
   if (chosen.length > 20) return { error: "تعداد تخصص‌ها معتبر نیست." };
   const found = await db.select({ id: specialties.id, code: specialties.code, title: specialties.title }).from(specialties).where(inArray(specialties.id, chosen));
   if (found.length !== chosen.length) return { error: "یکی از تخصص‌ها معتبر نیست." };
-  const detailRows = parseJsonField<{ code: string; value: string | null; options: string[] | null }>(String(data.get("specialtyDetails") || ""), (item) => {
+  // الحاقیهٔ ۲.۱۳.۰ — پیش‌اعتبارسنجی اجزای حفظ با پیام اختصاصی (پیش از پارسر عمومی)
+  try {
+    const parsedDetails: unknown = JSON.parse(String(data.get("specialtyDetails") || "").slice(0, 40000));
+    if (Array.isArray(parsedDetails)) {
+      for (const item of parsedDetails) {
+        if (item && typeof item === "object" && (item as Record<string, unknown>).code === "memorizer") {
+          const record = item as Record<string, unknown>;
+          const value = String(record.value || "");
+          if (value in hafizJuzOptions) {
+            const normalized = normalizeJuzParts(value, typeof record.juz === "string" ? record.juz.slice(0, 120) : null);
+            if (normalized === "invalid") return { error: "جزءهای انتخاب‌شده با میزان حفظ اعلام‌شده هم‌خوانی ندارد؛ در پنجرهٔ انتخاب اجزای قرآن دقیقاً به همان تعداد جزء انتخاب کنید." };
+            if (normalized === null) return { error: "جزءهای حفظ‌شده را از پنجرهٔ انتخاب اجزای قرآن تأیید کنید." };
+          }
+        }
+      }
+    }
+  } catch { /* خطای JSON توسط پارسر اصلی گزارش می‌شود */ }
+  const detailRows = parseJsonField<{ code: string; value: string | null; options: string[] | null; juz: string | null }>(String(data.get("specialtyDetails") || ""), (item) => {
     if (typeof item !== "object" || item === null) return null;
     const record = item as Record<string, unknown>;
     const code = String(record.code || "");
@@ -116,15 +133,25 @@ export async function registerCaseAction(_state: ActionState, data: FormData): P
       const value = String(record.value || "");
       const allowed = spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions;
       if (!(value in allowed)) return null;
-      return { code, value, options: null };
+      // الحاقیهٔ ۲.۱۳.۰ — ثبت‌نام عمومی: انتخاب دقیق جزءهای حفظ الزامی است و
+      // باید با میزان حفظ اعلام‌شده هم‌خوان باشد.
+      let juz: string | null = null;
+      if (spec.kind === "juz") {
+        const normalized = normalizeJuzParts(value, typeof record.juz === "string" ? record.juz.slice(0, 120) : null);
+        if (normalized === "invalid") return null;
+        if (normalized === null) return null; // پنجرهٔ انتخاب اجزا تأیید نشده است
+        juz = normalized;
+      }
+      return { code, value, options: null, juz };
     }
     const specOptions = spec.options ?? {};
     const rawOptions = Array.isArray(record.options) ? record.options : [];
     const options = [...new Set(rawOptions.map((option) => String(option)).filter((option) => option in specOptions))];
     if (!options.length) return null;
-    return { code, value: null, options };
+    return { code, value: null, options, juz: null };
   }, 20);
   if (detailRows === null) return { error: "جزئیات تخصص‌ها معتبر نیست؛ مقادیر هر تخصص را بررسی کنید." };
+  if (detailRows.some((item) => item.juz === null && item.code === "memorizer")) return { error: "جزءهای حفظ‌شده را از پنجرهٔ انتخاب اجزای قرآن تأیید کنید." };
   const chosenCodes = new Set(found.map((item) => item.code));
   if (detailRows.some((item) => !chosenCodes.has(item.code))) return { error: "جزئیات برای تخصصی ارسال شده که انتخاب نشده است." };
   const detailCodes = new Set(detailRows.map((item) => item.code));
@@ -349,6 +376,7 @@ export async function registerCaseAction(_state: ActionState, data: FormData): P
           specialtyId: codeToId.get(item.code)!,
           detailValue: item.value,
           detailOptions: item.options,
+          juzParts: item.juz,
           certDocumentId: specialtyCertKeys.find((entry) => entry.code === item.code) ? docIdByKey.get(specialtyCertKeys.find((entry) => entry.code === item.code)!.key) ?? null : null,
         })));
       }

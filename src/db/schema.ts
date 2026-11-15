@@ -187,6 +187,8 @@ export const activistSpecialtyDetails = pgTable("activist_specialty_details", {
   specialtyId: integer("specialty_id").notNull().references(() => specialties.id),
   detailValue: varchar("detail_value", { length: 40 }),
   detailOptions: jsonb("detail_options").$type<string[]>(),
+  // الحاقیهٔ ۲.۱۳.۰ — اجزای دقیق حفظ قرآن برای تخصص «حافظ» (مثل "1,2,5,12,20")
+  juzParts: varchar("juz_parts", { length: 120 }),
   // الحاقیهٔ ۲.۱۲.۰ — گواهی تخصص: فایل بارگذاری‌شده برای همین تخصص
   certDocumentId: uuid("cert_document_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
