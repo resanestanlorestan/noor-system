@@ -969,3 +969,9 @@
 .api-docs code { direction:ltr; background:#f0f7f3; padding:1px 6px; border-radius:5px; }
 .api-settings-form small { font-size:11px; color:#7c948b; }
 @media (max-width:920px) { .api-grid { grid-template-columns:1fr; } .api-log-head,.api-log-row { grid-template-columns:110px 54px 50px minmax(0,1.4fr) minmax(0,1fr) 64px 54px minmax(0,1fr) 80px; font-size:10px; } }
+/* الحاقیهٔ ۲.۱۶.۰ — اطلاع‌رسانی پیامکی مدیران: ردیف عملیات جدول و چک‌باکس ارسال خودکار */
+.sms-actions-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+.sms-actions-row form { margin:0; }
+.checkbox-field { display:flex; align-items:flex-start; gap:9px; font-size:12px; color:var(--muted); }
+.checkbox-field input { accent-color:var(--success); margin-top:2px; }
+.checkbox-field span { font-weight:600; color:var(--brand-text); }

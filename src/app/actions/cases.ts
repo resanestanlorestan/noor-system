@@ -15,6 +15,7 @@ import { can } from "@/lib/permissions";
 import { isUuid, managerInScope } from "@/lib/workflow-utils";
 import { deliverOutbox, notifyUsers, queueSms } from "@/lib/messaging";
 import { dispatchWebhookEvent } from "@/lib/api-outgoing";
+import { dispatchCaseCreatedSms } from "@/lib/manager-sms";
 import { resolveSmsTemplate } from "@/lib/sms-admin";
 import { normalizeText } from "@/lib/format";
 import { documentTypeLabels, type DocumentType } from "@/lib/constants";
@@ -74,6 +75,8 @@ async function advanceCase(data: FormData, target: "ready" | "pending") {
   if (result) messageRedirect(id, result);
   // الحاقیهٔ ۲.۱۵.۰ — وب‌هوک رویداد «ارسال برای بررسی» برای سامانه‌های خارجی
   if (target === "pending") void dispatchWebhookEvent("case.submitted", { caseId: id, status: "pending" });
+  // الحاقیهٔ ۲.۱۶.۰ — پیامک خودکار «ثبت پروندهٔ جدید» برای مدیران فعال فهرست اطلاع‌رسانی
+  if (target === "pending") void dispatchCaseCreatedSms(id, user.fullName, user.id);
   void deliverOutbox();
   revalidatePath("/dashboard"); revalidatePath("/cases"); messageRedirect(id, target === "ready" ? "پرونده آماده ارسال است؛ برای بررسی آن را ارسال کنید." : "پرونده برای بررسی ارسال شد.");
 }

@@ -541,6 +541,48 @@ export const smsSettings = pgTable("sms_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// الحاقیهٔ ۲.۱۶.۰ — دریافت‌کنندگان اطلاع‌رسانی پیامکی مدیران. ردیف‌های «auto»
+// از سامانهٔ کاربران همگام می‌شوند (نقش مدیریتی یا سمت سفارشی حاوی «مدیر») و
+// شماره‌ها یکتاست؛ فعال/غیرفعال بودن دریافت پیامک برای هر مدیر مستقل است.
+export const managerSmsRecipients = pgTable("manager_sms_recipients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceUserId: uuid("source_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  fullName: varchar("full_name", { length: 120 }).notNull(),
+  position: varchar("position", { length: 120 }).notNull().default(""),
+  phone: varchar("phone", { length: 20 }).notNull().unique(),
+  smsEnabled: boolean("sms_enabled").notNull().default(true),
+  source: varchar("source", { length: 10 }).$type<"auto" | "manual">().notNull().default("manual"),
+  createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("manager_sms_recipients_source_idx").on(table.sourceUserId)]);
+
+// گزارش رویدادهای پیامک مدیریتی؛ کلید یکتا (نوع رویداد + پرونده + گیرنده)
+// ارسال تکراری برای یک پرونده را در سطح دیتابیس ناممکن می‌کند.
+export const managerSmsEvents = pgTable("manager_sms_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventType: varchar("event_type", { length: 40 }).notNull().default("case_created"),
+  entityId: uuid("entity_id"),
+  recipientId: uuid("recipient_id").notNull().references((): AnyPgColumn => managerSmsRecipients.id, { onDelete: "cascade" }),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  message: text("message").notNull(),
+  status: varchar("status", { length: 10 }).$type<"queued" | "sent" | "failed" | "local">().notNull().default("queued"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  outboxId: uuid("outbox_id"),
+  createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+}, (table) => [uniqueIndex("manager_sms_events_dedupe_idx").on(table.eventType, table.entityId, table.recipientId)]);
+
+// کلید خاموش/روشن ارسال خودکار هنگام ثبت پرونده (رکورد تک‌تایی «default»).
+export const managerSmsSettings = pgTable("manager_sms_settings", {
+  id: varchar("id", { length: 20 }).primaryKey(),
+  autoCaseCreated: boolean("auto_case_created").notNull().default(true),
+  updatedBy: uuid("updated_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Group broadcast ledger (Release 2.2): one row per mass message with the
 // audience filters it was sent to and the delivery counts. The individual SMS
 // rows live in message_outbox, the in-app ones in notifications.

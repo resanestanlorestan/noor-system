@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { stashFlash } from "@/lib/flash";
 import { db } from "@/db";
 import { activistOrganizations, activistWritings, activists, activityRecords, appeals, applicationVersions, applications, auditLogs, certificates, correctionRequests, counties, customRoles, documents, documentRequests, educationRecords, educationalCourses, emailVerificationTokens, events, expertNotes, expertReferrals, mfaRecoveryCodes, messageBroadcasts, messageOutbox, notifications, organizations, passwordResetTokens, pendingMfaSessions, provinces, sessions, specialties, statusHistory, userSpecialties, users, workHistory } from "@/db/schema";
+import { syncManagerRecipients } from "@/lib/manager-sms";
 import { audit, hashPassword, requireUser } from "@/lib/auth";
 import { normalizeDigits, normalizeText } from "@/lib/format";
 import { validIranMobile, validPasswordFormat, PASSWORD_POLICY_ERROR } from "@/lib/validation";
@@ -64,6 +65,8 @@ export async function createStaffAction(_state: ActionState, data: FormData): Pr
       await tx.insert(auditLogs).values({ actorId: actor.id, action: "create_staff", targetType: "user", targetId: created.id, detail: customRoleId ? `${role}|custom:${customRoleId}` : role });
     });
   } catch { return { error: "ایجاد کاربر انجام نشد؛ ممکن است شماره موبایل یا ایمیل تکراری باشد." }; }
+  // الحاقیهٔ ۲.۱۶.۰ — همگام‌سازی خودکار فهرست پیامکی مدیران پس از هر تغییر کاربر
+  await syncManagerRecipients(actor.id).catch(() => {});
   revalidatePath("/users"); redirect("/users?m=" + stashFlash("کاربر با موفقیت ایجاد شد."));
 }
 
@@ -120,6 +123,8 @@ export async function updateStaffAction(_state: ActionState, data: FormData): Pr
       await tx.insert(auditLogs).values({ actorId:actor.id, action:"update_staff", targetType:"user", targetId:id, detail: customRoleChanged ? `${role}|custom:${customRoleId || "none"}` : role });
     });
   } catch { return { error: "ویرایش کاربر انجام نشد؛ دوباره تلاش کنید." }; }
+  // الحاقیهٔ ۲.۱۶.۰ — همگام‌سازی خودکار فهرست پیامکی مدیران پس از هر تغییر کاربر
+  await syncManagerRecipients(actor.id).catch(() => {});
   revalidatePath("/users"); redirect("/users?m=" + stashFlash("اطلاعات کاربر به‌روزرسانی شد."));
 }
 
@@ -140,6 +145,8 @@ export async function toggleUserAction(data: FormData) {
     if (target.active) await tx.delete(sessions).where(eq(sessions.userId, target.id));
     await tx.insert(auditLogs).values({ actorId:actor.id, action:target.active ? "deactivate_user" : "activate_user", targetType:"user", targetId:target.id });
   });
+  // الحاقیهٔ ۲.۱۶.۰ — همگام‌سازی خودکار فهرست پیامکی مدیران پس از هر تغییر کاربر
+  await syncManagerRecipients(actor.id).catch(() => {});
   revalidatePath("/users");
 }
 
@@ -254,6 +261,7 @@ export async function deleteUserAction(data: FormData) {
       }).where(eq(users.id, id));
       await tx.insert(auditLogs).values({ actorId: actor.id, action: "anonymize_user", targetType: "user", targetId: id, detail: target.role });
     });
+    await syncManagerRecipients(actor.id).catch(() => {});
     revalidatePath("/users");
     return redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» به‌دلیل اتصال به داده‌های ثبت‌شده به‌صورت امن حذف شد: اطلاعات هویتی پاک، ورود مسدود و حساب از فهرست خارج شد؛ ردپای ممیزی آن حفظ ماند.`));
   }
@@ -265,6 +273,8 @@ export async function deleteUserAction(data: FormData) {
     await tx.delete(users).where(eq(users.id, id));
     await tx.insert(auditLogs).values({ actorId: actor.id, action: "delete_user", targetType: "user", targetId: id, detail: target.role });
   });
+  // الحاقیهٔ ۲.۱۶.۰ — همگام‌سازی خودکار فهرست پیامکی مدیران پس از هر تغییر کاربر
+  await syncManagerRecipients(actor.id).catch(() => {});
   revalidatePath("/users");
   redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» به‌همراه نشست‌ها و اعلان‌هایش حذف شد.`));
 }

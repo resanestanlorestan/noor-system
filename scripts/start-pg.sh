@@ -17,11 +17,7 @@ fi
 mkdir -p "$(dirname "$LOG")"
 "$BIN/pg_ctl" -D "$DATA" -l "$LOG" -o "-p 5432 -c listen_addresses=127.0.0.1" start
 sleep 1
-# Ensure expected login role + databases exist (idempotent).
-"$BIN/psql" -h 127.0.0.1 -p 5432 -U noor -d postgres -c "select 1" >/dev/null 2>&1 || {
-  # role may not exist if cluster was initialised differently
-  "$BIN/psql" -h 127.0.0.1 -p 5432 -d postgres -c "create role noor login password 'noor_dev_2026' superuser" || true
-}
-PGPASSWORD=noor_dev_2026 "$BIN/psql" -h 127.0.0.1 -p 5432 -U noor -d postgres -tc "select 1 from pg_database where datname='noor_dev'" | grep -q 1 || \
-  PGPASSWORD=noor_dev_2026 "$BIN/psql" -h 127.0.0.1 -p 5432 -U noor -d postgres -c "create database noor_dev owner noor"
+# Ensure expected databases exist (idempotent, psql-free — the newer
+# embedded-postgres package ships without native psql).
+node "$(dirname "$0")/ensure-local-db.js"
 echo "postgres ready on 127.0.0.1:5432 (user noor)"
