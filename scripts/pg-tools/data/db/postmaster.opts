@@ -1,1 +1,0 @@
-/home/z/my-project/scripts/pg-tools/node_modules/@embedded-postgres/linux-x64/native/bin/postgres "-D" "/home/z/my-project/scripts/pg-tools/data/db" "-p" "5432" "-c" "listen_addresses=127.0.0.1"
