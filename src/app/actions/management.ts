@@ -1,5 +1,5 @@
 "use server";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -9,7 +9,7 @@ import { activistOrganizations, activistWritings, activists, activityRecords, ap
 import { syncManagerRecipients } from "@/lib/manager-sms";
 import { purgeUserAccount, removeUserFiles } from "@/lib/user-purge";
 import { audit, hashPassword, requireUser } from "@/lib/auth";
-import { normalizeDigits, normalizeText } from "@/lib/format";
+import { normalizeDigits, normalizeText, faNumber } from "@/lib/format";
 import { validIranMobile, validPasswordFormat, PASSWORD_POLICY_ERROR } from "@/lib/validation";
 import { can } from "@/lib/permissions";
 import type { ActionState } from "@/lib/action-state";
@@ -215,7 +215,11 @@ export async function addOrganizationAction(_state: ActionState, data: FormData)
  *  تنها استثنا: اگر کاربر در روند کاری پروندهٔ «دیگران» نقش داشته باشد
  *  (کارشناس، ثبت‌کننده، نویسندهٔ یادداشت و…) ردیف حساب کامل حذف نمی‌شود تا
  *  دادهٔ کاربران دیگر نشکند؛ آن ردیف با حفظ زنجیرهٔ ممیزی گمنام می‌شود ولی
- *  دادهٔ متعلق به خودش همان‌طور کامل پاک می‌شود. حذف حساب مدیر کل ممنوع است. */
+ *  دادهٔ متعلق به خودش همان‌طور کامل پاک می‌شود. حذف حساب مدیر کل ممنوع است.
+ *  الحاقیهٔ ۲.۱۷.۱ — حسابِ «جامانده»: با کد پیش از ۲.۱۷.۰ حذف/گمنام شده ولی
+ *  رکورد فعال و پروندهٔ او پاک نشده و کد ملی‌اش را قفل کرده است؛ برای چنین
+ *  حسابی اجرای دوبارهٔ حذف یکپارچه مجاز است (حسابِ بی‌دادهٔ جامانده همچنان
+ *  رد می‌شود تا زنجیرهٔ ممیزی بی‌دلیل دست‌نخورد). */
 export async function deleteUserAction(data: FormData) {
   const actor = await requireUser(); const id = field(data, "userId", 40);
   const fail = (message: string) => redirect("/users?m=" + stashFlash(message));
@@ -223,19 +227,25 @@ export async function deleteUserAction(data: FormData) {
   const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!target) return fail("کاربر پیدا نشد.");
   if (target.role === "super_admin") return fail("حذف حساب مدیر کل سامانه مجاز نیست.");
-  if (target.deletedAt) return fail("این حساب پیش‌تر به‌صورت امن حذف شده است.");
+  const stale = Boolean(target.deletedAt);
+  if (stale) {
+    const [leftover] = await db.select({ id: activists.id }).from(activists).where(eq(activists.userId, id)).limit(1);
+    if (!leftover) return fail("این حساب پیش‌تر به‌صورت امن حذف شده است و دادهٔ جامانده‌ای برای پاکسازی ندارد.");
+  }
   const purge = await db.transaction(async (tx) => {
     const outcome = await purgeUserAccount(tx, id);
-    const detail = `${target.role};cases=${outcome.cases};files=${outcome.storageKeys.length}`;
+    const detail = `${stale ? "stale;" : ""}${target.role};cases=${outcome.cases};files=${outcome.storageKeys.length}`;
     if (outcome.mode === "anonymized") {
-      const shortId = id.slice(0, 8);
-      const unusablePasswordHash = await hashPassword(randomUUID());
-      await tx.update(users).set({
-        fullName: `حساب حذف‌شده (${shortId})`, firstName: "حساب", lastName: "حذف‌شده",
-        email: null, phone: null, active: false, passwordHash: unusablePasswordHash,
-        mfaSecretCipher: null, mfaEnabled: false, mfaEnabledAt: null,
-        customRoleId: null, deletedAt: new Date(),
-      }).where(eq(users.id, id));
+      if (!stale) {
+        const shortId = id.slice(0, 8);
+        const unusablePasswordHash = await hashPassword(randomUUID());
+        await tx.update(users).set({
+          fullName: `حساب حذف‌شده (${shortId})`, firstName: "حساب", lastName: "حذف‌شده",
+          email: null, phone: null, active: false, passwordHash: unusablePasswordHash,
+          mfaSecretCipher: null, mfaEnabled: false, mfaEnabledAt: null,
+          customRoleId: null, deletedAt: new Date(),
+        }).where(eq(users.id, id));
+      }
       await tx.insert(auditLogs).values({ actorId: actor.id, action: "anonymize_user", targetType: "user", targetId: id, detail });
     } else {
       await tx.insert(auditLogs).values({ actorId: actor.id, action: "delete_user", targetType: "user", targetId: id, detail });
@@ -248,8 +258,41 @@ export async function deleteUserAction(data: FormData) {
   await syncManagerRecipients(actor.id).catch(() => {});
   revalidatePath("/users");
   const scope = purge.cases > 0 ? `${purge.cases} پرونده، مدارک و فایل‌های پیوست آن و همهٔ رکوردهای وابسته` : "همهٔ داده‌های وابسته";
+  if (stale) {
+    redirect("/users?m=" + stashFlash(`دادهٔ جاماندهٔ حسابِ پیش‌تر حذف‌شده «${target.fullName}» — ${scope} — پاکسازی شد؛ کد ملی و شمارهٔ موبایل برای ثبت‌نام مجدد آزاد است.`));
+  }
   if (purge.mode === "total") {
     redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» به‌همراه ${scope} به‌طور کامل حذف شد؛ کد ملی و شمارهٔ موبایل او برای ثبت‌نام مجدد آزاد است.`));
   }
   redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» و ${scope} حذف شد؛ چون در روند کاری پرونده‌های دیگر نقش داشته، ردپای ممیزی او با نام محو حفظ شده است. کد ملی و شمارهٔ موبایل او برای ثبت‌نام مجدد آزاد است.`));
+}
+
+/** الحاقیهٔ ۲.۱۷.۱ — جاروب رکوردهای فعالِ «بدون مالکِ زنده»: رکورد فعالی که
+ *  نه حساب مالک دارد و نه مالکش حسابِ حذف‌شده است و هیچ پروندهٔ فعالی هم
+ *  ندارد — بازماندهٔ کد پیش از ۲.۱۷.۰ که هنگام حذف پرونده، ردیف فعال را پاک
+ *  نمی‌کرد و قید یکتای کد ملی را می‌بست. تکلیف چنین رکوردهایی با حذف نرمِ
+ *  قابل بازیابی (همان معنای «حذف از فهرست فعال») روشن می‌شود؛ رکوردهای دارای
+ *  پروندهٔ فعال یا مالکِ زنده دست‌نخورده می‌مانند. فقط مدیر ارشد. */
+export async function sweepStaleActivistsAction(data: FormData) {
+  const actor = await requireUser();
+  const fail = (message: string) => redirect("/users?m=" + stashFlash(message));
+  if (actor.effectiveRole !== "super_admin") return fail("جاروب داده‌های جامانده فقط از سوی مدیر ارشد مجاز است.");
+  const swept = await db.transaction(async (tx) => {
+    const rows = await tx.select({ id: activists.id }).from(activists)
+      .leftJoin(users, eq(activists.userId, users.id))
+      .where(and(
+        isNull(activists.deletedAt),
+        or(isNull(activists.userId), isNotNull(users.deletedAt)),
+        sql`not exists (select 1 from ${applications} app where app.activist_id = ${activists.id} and app.deleted_at is null)`,
+      ));
+    if (!rows.length) return 0;
+    await tx.update(activists).set({ deletedAt: new Date(), deletedBy: actor.id, updatedAt: new Date() })
+      .where(and(inArray(activists.id, rows.map((row) => row.id)), isNull(activists.deletedAt)));
+    await tx.insert(auditLogs).values({ actorId: actor.id, action: "sweep_stale_activists", targetType: "activist", targetId: null, detail: `count=${rows.length}` });
+    return rows.length;
+  });
+  revalidatePath("/users");
+  redirect("/users?m=" + stashFlash(swept
+    ? `${faNumber(swept)} رکورد فعالِ بدون مالک یا بدون پروندهٔ فعال، نرم‌حذفِ قابل بازیابی شد و کد ملی آن‌ها برای ثبت‌نام مجدد آزاد است.`
+    : "رکورد جامانده‌ای برای پاکسازی پیدا نشد؛ همهٔ کدهای ملی آزادند."));
 }

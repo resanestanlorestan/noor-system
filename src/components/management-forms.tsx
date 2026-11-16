@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useState } from "react";
 import { LoaderCircle, Plus } from "lucide-react";
-import { addCountyAction, addOrganizationAction, addSpecialtyAction, createStaffAction, deleteUserAction, toggleUserAction } from "@/app/actions/management";
+import { addCountyAction, addOrganizationAction, addSpecialtyAction, createStaffAction, deleteUserAction, sweepStaleActivistsAction, toggleUserAction } from "@/app/actions/management";
 import { deleteCaseAction, restoreCaseAction } from "@/app/actions/cases";
 import { initialActionState } from "@/lib/action-state";
 import { roleLabels, type UserRole } from "@/lib/constants";
@@ -49,6 +49,16 @@ export function ToggleUser({ id, active }: { id:string; active:boolean }) {
  *  او با نام محو می‌ماند. نمایش دکمه فقط برای مدیر کل است و سرور هم همان گارد را دارد. */
 export function DeleteUser({ id, name }: { id:string; name:string }) {
   return <form action={deleteUserAction}><input type="hidden" name="userId" value={id} /><button className="table-link danger" onClick={(event) => {if (!window.confirm(`حساب «${name}» و همهٔ اطلاعات وابسته به آن حذف شود؟\n\nبا تأیید: پروندهٔ او در بخش مدیریت پرونده‌ها، اطلاعات هویتی و تحصیلی، تخصص‌ها و فعالیت‌های قرآنی، سوابق همکاری و شغلی، دوره‌ها، مدارک و گواهی‌های بارگذاری‌شده و فایل‌های پیوست به‌طور کامل و برگشت‌ناپذیر حذف می‌شوند و کد ملی و شمارهٔ موبایل او برای ثبت‌نام مجدد آزاد می‌شود.\n\nاگر این کاربر در روند کاری پروندهٔ کاربران دیگر نقش داشته باشد، آن رکوردها حفظ می‌شوند و فقط ردپای ممیزی حساب با نام محو می‌ماند.`)) event.preventDefault();}}>حذف</button></form>;
+}
+/** الحاقیهٔ ۲.۱۷.۱ — پاکسازی دادهٔ جاماندهٔ حسابی که با کد پیش از ۲.۱۷.۰ حذف/
+ *  گمنام شده ولی رکورد فعال و پروندهٔ او باقی مانده و کد ملی‌اش را قفل کرده است. */
+export function DeleteStaleUser({ id, name }: { id:string; name:string }) {
+  return <form action={deleteUserAction}><input type="hidden" name="userId" value={id} /><button className="table-link danger" onClick={(event) => {if (!window.confirm(`حساب «${name}» پیش‌تر حذف شده ولی دادهٔ جاماندهٔ او (رکورد فعال و پرونده) باقی مانده و کد ملی‌اش را قفل کرده است.\n\nبا تأیید، همان حذف یکپارچهٔ کامل روی دادهٔ جامانده اجرا می‌شود و کد ملی و شمارهٔ موبایل برای ثبت‌نام مجدد آزاد می‌شود.`)) event.preventDefault();}}>پاکسازی دادهٔ جامانده</button></form>;
+}
+/** الحاقیهٔ ۲.۱۷.۱ — جاروب همهٔ رکوردهای فعالِ بدون مالک یا بدون پروندهٔ فعال؛
+ *  بازمانده‌های کد قدیمی که کد ملی را قفل کرده‌اند — نرم‌حذفِ قابل بازیابی. */
+export function SweepStale() {
+  return <form action={sweepStaleActivistsAction}><button className="small-action" onClick={(event) => {if (!window.confirm("همهٔ رکوردهای فعالِ بدون مالک یا بدون پروندهٔ فعال، نرم‌حذفِ قابل بازیابی شوند؟\n\nاین رکوردها بازماندهٔ حذف‌های کد قدیمی‌اند و کد ملی را قفل کرده‌اند؛ پس از جاروب در بانک حذف‌شده‌ها قابل بازیابی‌اند. رکوردهای دارای پروندهٔ فعال یا مالک زنده دست‌نخورده می‌مانند.")) event.preventDefault();}}>جاروب رکوردهای جامانده</button></form>;
 }
 /** الحاقیهٔ ۲.۱۰.۴ — حذف پرونده در بانک پرونده‌ها با دو گزینه از سمت سرور:
  *  «حذف با ماندگاری در بانک» (برگشت‌پذیر با بازیابی) و «حذف کلی» (قطعی).
