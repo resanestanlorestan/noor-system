@@ -38,9 +38,10 @@ function back(message: string): never {
 export async function syncManagersAction(): Promise<void> {
   const user = await managerSmsGuard();
   const result = await syncManagerRecipients(user.id);
-  await audit(user.id, "sync_manager_sms_recipients", "manager_sms_recipients", "all", `identified=${result.identified};added=${result.added};updated=${result.updated};removed=${result.removed};duplicates=${result.duplicates.length};errors=${result.errors.length}`);
+  await audit(user.id, "sync_manager_sms_recipients", "manager_sms_recipients", "all", `identified=${result.identified};added=${result.added};updated=${result.updated};removed=${result.removed};excludedSkipped=${result.excludedSkipped};duplicates=${result.duplicates.length};errors=${result.errors.length}`);
   revalidatePath("/manager-sms");
   const parts = [`همگام‌سازی انجام شد — ${result.identified} مدیر شناسایی شد، ${result.added} ردیف افزوده، ${result.updated} به‌روزرسانی و ${result.removed} ردیف منقضی حذف شد.`];
+  if (result.excludedSkipped) parts.push(`${result.excludedSkipped} مدیرِ کنارگذاشته مثل قبل در فهرست قرار نگرفت؛ برای بازگشت از بخش «مدیران کنارگذاشته» بازگردانی کنید.`);
   for (const item of [...result.duplicates, ...result.errors]) parts.push(`• ${item}`);
   back(parts.join("\n"));
 }
@@ -83,12 +84,32 @@ export async function deleteManagerRecipientAction(data: FormData) {
   const user = await managerSmsGuard();
   const id = field(data, "recipientId", 40);
   if (!isUuid(id)) back("شناسهٔ مدیر معتبر نیست.");
-  const [row] = await db.select({ fullName: managerSmsRecipients.fullName }).from(managerSmsRecipients).where(eq(managerSmsRecipients.id, id)).limit(1);
+  const [row] = await db.select({ fullName: managerSmsRecipients.fullName, source: managerSmsRecipients.source }).from(managerSmsRecipients).where(eq(managerSmsRecipients.id, id)).limit(1);
   if (!row) back("این مدیر در فهرست پیدا نشد.");
+  if (row.source === "auto") {
+    // الحاقیهٔ ۲.۱۶.۱ — حذف ردیف همگام‌شده یعنی کنارگذاشتن: همگام‌سازی بعدی
+    // او را دوباره نمی‌سازد و پیامکی هم نمی‌گیرد؛ با بازگردانی قابل بازگشت است.
+    await db.update(managerSmsRecipients).set({ excluded: true, updatedAt: new Date() }).where(eq(managerSmsRecipients.id, id));
+    await audit(user.id, "exclude_manager_sms_recipient", "manager_sms_recipient", id, row.fullName);
+    revalidatePath("/manager-sms");
+    back(`مدیر «${row.fullName}» از فهرست کنار گذاشته شد؛ در همگام‌سازی‌های بعدی دوباره اضافه نمی‌شود و پیامکی دریافت نمی‌کند. برای بازگشت، از بخش «مدیران کنارگذاشته» او را بازگردانی کنید.`);
+  }
   await db.delete(managerSmsRecipients).where(eq(managerSmsRecipients.id, id));
   await audit(user.id, "delete_manager_sms_recipient", "manager_sms_recipient", id, row.fullName);
   revalidatePath("/manager-sms");
   back(`مدیر «${row.fullName}» و سابقهٔ پیامک‌هایش حذف شد.`);
+}
+
+export async function restoreManagerRecipientAction(data: FormData) {
+  const user = await managerSmsGuard();
+  const id = field(data, "recipientId", 40);
+  if (!isUuid(id)) back("شناسهٔ مدیر معتبر نیست.");
+  const [row] = await db.select({ fullName: managerSmsRecipients.fullName, excluded: managerSmsRecipients.excluded }).from(managerSmsRecipients).where(eq(managerSmsRecipients.id, id)).limit(1);
+  if (!row || !row.excluded) back("این مدیر در بخش کنارگذاشته‌ها پیدا نشد.");
+  await db.update(managerSmsRecipients).set({ excluded: false, updatedAt: new Date() }).where(eq(managerSmsRecipients.id, id));
+  await audit(user.id, "restore_manager_sms_recipient", "manager_sms_recipient", id, row.fullName);
+  revalidatePath("/manager-sms");
+  back(`مدیر «${row.fullName}» به فهرست دریافت‌کنندگان بازگشت؛ نام، سمت و شمارهٔ او در همگام‌سازی بعدی از حسابش به‌روز می‌شود.`);
 }
 
 export async function toggleManagerRecipientSmsAction(data: FormData) {

@@ -45,9 +45,12 @@ export function ToggleRecipient({ id, enabled, name }: { id: string; enabled: bo
     <button className="table-link" onClick={(event) => { if (!window.confirm(enabled ? `دریافت پیامک برای «${name}» غیرفعال شود؟` : `دریافت پیامک برای «${name}» فعال شود؟`)) event.preventDefault(); }}>{enabled ? "غیرفعال‌سازی" : "فعال‌سازی"}</button></form>;
 }
 
-export function DeleteRecipient({ id, name }: { id: string; name: string }) {
+export function DeleteRecipient({ id, name, source }: { id: string; name: string; source: "auto" | "manual" }) {
+  const message = source === "auto"
+    ? `مدیر «${name}» از فهرست دریافت‌کنندگان کنار گذاشته شود؟\nاین مدیر از سامانهٔ کاربران همگام می‌شود؛ با حذف، در همگام‌سازی‌های بعدی دوباره اضافه نمی‌شود و پیامکی دریافت نمی‌کند.\nبرای بازگشت، از بخش «مدیران کنارگذاشته» دکمهٔ «بازگردانی» را بزنید.`
+    : `مدیر «${name}» و سابقهٔ پیامک‌هایش برای همیشه حذف شود؟\nاین ردیف ثبت دستی است و با همگام‌سازی دوباره ساخته نمی‌شود.`;
   return <form action={deleteManagerRecipientAction}><input type="hidden" name="recipientId" value={id} />
-    <button className="table-link danger" onClick={(event) => { if (!window.confirm(`مدیر «${name}» از فهرست دریافت‌کنندگان حذف شود؟\nسابقهٔ پیامک‌های او نیز حذف می‌شود. اگر حساب او در سامانه نقش مدیریتی داشته باشد، با همگام‌سازی بعدی دوباره به فهرست برمی‌گردد.`)) event.preventDefault(); }}><Trash2 size={13} /> حذف</button></form>;
+    <button className="table-link danger" onClick={(event) => { if (!window.confirm(message)) event.preventDefault(); }}><Trash2 size={13} /> حذف</button></form>;
 }
 
 export function AutoSettingsForm({ autoCaseCreated }: { autoCaseCreated: boolean }) {

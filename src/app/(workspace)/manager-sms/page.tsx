@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { currentSmsSource } from "@/lib/messaging";
 import { syncManagerRecipients } from "@/lib/manager-sms";
-import { syncManagersAction } from "@/app/actions/manager-sms";
+import { syncManagersAction, restoreManagerRecipientAction } from "@/app/actions/manager-sms";
 import { resendManagerEventAction } from "@/app/actions/manager-sms";
 import { AddRecipientForm, AutoSettingsForm, DeleteRecipient, EditRecipient, ManagerTestSmsForm, ToggleRecipient } from "@/components/manager-sms-forms";
 import { FlashNotice } from "@/components/flash-notice";
@@ -29,7 +29,7 @@ export default async function ManagerSmsPage({ searchParams }: { searchParams: P
   await syncManagerRecipients(user.id).catch(() => {});
   const query = await searchParams;
   const flash = popFlash(query.m);
-  const [recipients, events, settingsRow, source] = await Promise.all([
+  const [allRecipients, events, settingsRow, source] = await Promise.all([
     db.select().from(managerSmsRecipients).orderBy(desc(managerSmsRecipients.createdAt)),
     db.select({
       id: managerSmsEvents.id, phone: managerSmsEvents.phone, message: managerSmsEvents.message,
@@ -41,6 +41,9 @@ export default async function ManagerSmsPage({ searchParams }: { searchParams: P
     currentSmsSource(),
   ]);
   const autoCaseCreated = settingsRow[0]?.autoCaseCreated ?? true;
+  // الحاقیهٔ ۲.۱۶.۱ — حذف مدیر همگام‌شده یعنی کنارگذاشتن؛ این‌ها در جدول جداگانه با امکان بازگردانی می‌آیند
+  const recipients = allRecipients.filter((item) => !item.excluded);
+  const excludedRows = allRecipients.filter((item) => item.excluded);
   const activeCount = recipients.filter((item) => item.smsEnabled).length;
   const failedCount = events.filter((item) => item.status === "failed").length;
   const sourceText = source ? `${source.label} — تنظیمات ${source.source === "database" ? "پنل مدیریت" : "متغیرهای محیطی"}` : "حالت محلی: پیامک‌ها فقط در صندوق پیام‌ها ذخیره می‌شوند";
@@ -51,11 +54,11 @@ export default async function ManagerSmsPage({ searchParams }: { searchParams: P
     {flash && <FlashNotice message={flash} />}
 
     <section className="ws-panel sms-status-panel">
-      <div className="ws-panel-head"><div><span>وضعیت اطلاع‌رسانی</span><h2>{autoCaseCreated ? "ارسال خودکار هنگام ثبت پرونده فعال است" : "ارسال خودکار موقتاً خاموش است"}</h2><p>{faNumber(recipients.length)} مدیر در فهرست · {faNumber(activeCount)} دریافت فعال · وضعیت پنل پیامکی: {sourceText}</p></div><span className="panel-outline-icon"><PhoneCall size={18} /></span></div>
+      <div className="ws-panel-head"><div><span>وضعیت اطلاع‌رسانی</span><h2>{autoCaseCreated ? "ارسال خودکار هنگام ثبت پرونده فعال است" : "ارسال خودکار موقتاً خاموش است"}</h2><p>{faNumber(recipients.length)} مدیر در فهرست · {faNumber(activeCount)} دریافت فعال{excludedRows.length > 0 && <> · {faNumber(excludedRows.length)} کنارگذاشته</>} · وضعیت پنل پیامکی: {sourceText}</p></div><span className="panel-outline-icon"><PhoneCall size={18} /></span></div>
     </section>
 
     <section className="ws-panel detail-section">
-      <div className="ws-panel-head"><div><span>مدیران دریافت‌کننده</span><h2>فهرست مدیران سامانهٔ کاربران</h2><p>با هر باز شدن این صفحه فهرست به‌طور خودکار از کاربران سامانه همگام می‌شود؛ کاربران دارای نقش مدیریتی یا سمت سفارشی حاوی «مدیر» اضافه می‌شوند، اطلاعات تغییرکرده به‌روز می‌شود و شمارهٔ تکراری ثبت نمی‌شود. پیامک فقط برای مدیران با وضعیت «فعال» ارسال می‌شود.</p></div>
+      <div className="ws-panel-head"><div><span>مدیران دریافت‌کننده</span><h2>فهرست مدیران سامانهٔ کاربران</h2><p>با هر باز شدن این صفحه فهرست به‌طور خودکار از کاربران سامانه همگام می‌شود؛ کاربران دارای نقش مدیریتی یا سمت سفارشی حاوی «مدیر» اضافه می‌شوند، اطلاعات تغییرکرده به‌روز می‌شود و شمارهٔ تکراری ثبت نمی‌شود. پیامک فقط برای مدیران با وضعیت «فعال» ارسال می‌شود. حذفِ مدیرِ همگام‌شده یعنی کنار گذاشتن او — در همگام‌سازی‌های بعدی دوباره اضافه نمی‌شود و از بخش «مدیران کنارگذاشته» قابل بازگردانی است.</p></div>
         <form action={syncManagersAction}><button className="secondary-button"><UserPlus size={16} /> دریافت و به‌روزرسانی مدیران</button></form></div>
       <AddRecipientForm />
       {recipients.length > 0 && <div className="ws-table-scroll"><table className="ws-table"><thead><tr><th>مدیر</th><th>سمت</th><th>شمارهٔ موبایل</th><th>منبع</th><th>دریافت پیامک</th><th>عملیات</th></tr></thead><tbody>
@@ -68,10 +71,21 @@ export default async function ManagerSmsPage({ searchParams }: { searchParams: P
           <td><div className="sms-actions-row">
             <ToggleRecipient id={item.id} enabled={item.smsEnabled} name={item.fullName} />
             <EditRecipient recipient={{ id: item.id, fullName: item.fullName, position: item.position, phone: item.phone, source: item.source }} />
-            <DeleteRecipient id={item.id} name={item.fullName} />
+            <DeleteRecipient id={item.id} name={item.fullName} source={item.source} />
           </div></td>
         </tr>)}
       </tbody></table></div>}
+      {excludedRows.length > 0 && <>
+        <div className="ws-panel-head" style={{ marginTop: 18 }}><div><span>مدیران کنارگذاشته</span><h2>از فهرست پیامک کنار گذاشته‌شده‌ها</h2><p>این مدیران با «حذف» از فهرست بالا کنار گذاشته شده‌اند؛ در همگام‌سازی‌ها دوباره اضافه نمی‌شوند و پیامکی دریافت نمی‌کنند. برای بازگشت به فهرست، بازگردانی کنید.</p></div></div>
+        <div className="ws-table-scroll"><table className="ws-table"><thead><tr><th>مدیر</th><th>سمت</th><th>شمارهٔ موبایل</th><th>عملیات</th></tr></thead><tbody>
+          {excludedRows.map((item) => <tr key={item.id}>
+            <td><strong>{item.fullName}</strong></td>
+            <td>{item.position || "—"}</td>
+            <td dir="ltr">{item.phone}</td>
+            <td><form action={restoreManagerRecipientAction}><input type="hidden" name="recipientId" value={item.id} /><button className="table-link">بازگردانی</button></form></td>
+          </tr>)}
+        </tbody></table></div>
+      </>}
     </section>
 
     <section className="ws-panel detail-section">

@@ -551,6 +551,9 @@ export const managerSmsRecipients = pgTable("manager_sms_recipients", {
   position: varchar("position", { length: 120 }).notNull().default(""),
   phone: varchar("phone", { length: 20 }).notNull().unique(),
   smsEnabled: boolean("sms_enabled").notNull().default(true),
+  // الحاقیهٔ ۲.۱۶.۱ — کنارگذاشتن: حذف ردیف همگام‌شده یعنی این پرچم تا
+  // همگام‌سازی ردیف را دوباره نسازد؛ با «بازگردانی» به فهرست برمی‌گردد.
+  excluded: boolean("excluded").notNull().default(false),
   source: varchar("source", { length: 10 }).$type<"auto" | "manual">().notNull().default("manual"),
   createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

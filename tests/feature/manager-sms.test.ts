@@ -15,7 +15,7 @@ import {
 import { saveCaseCore } from "@/lib/case-save";
 import { uploadDocumentAction, uploadPhotoAction, prepareCaseAction, submitCaseAction } from "@/app/actions/cases";
 import { dispatchCaseCreatedSms, syncManagerRecipients } from "@/lib/manager-sms";
-import { addManagerRecipientAction, resendManagerEventAction, toggleManagerRecipientSmsAction, deleteManagerRecipientAction } from "@/app/actions/manager-sms";
+import { addManagerRecipientAction, resendManagerEventAction, restoreManagerRecipientAction, toggleManagerRecipientSmsAction, deleteManagerRecipientAction } from "@/app/actions/manager-sms";
 import { saveCustomRoleAction, deleteCustomRoleAction } from "@/app/actions/permissions";
 
 let f: Fixture;
@@ -138,6 +138,31 @@ describe("اطلاع‌رسانی پیامکی مدیران", () => {
 
     await redirectOf(() => deleteManagerRecipientAction(form({ recipientId: manual.id })));
     expect(await db.select().from(s.managerSmsRecipients).where(eq(s.managerSmsRecipients.id, manual.id))).toHaveLength(0);
+  }, 40_000);
+
+  it("حذف مدیر همگام‌شده یعنی کنارگذاشتن: در همگام‌سازی بازنمی‌گردد، پیامک نمی‌گیرد و بازگردانی ممکن است", async () => {
+    await loginAs("super");
+    const provRow = await recipientOf(f.users.prov.id);
+    expect(provRow).toBeTruthy();
+    // حذف ردیف همگام‌شده → کنار گذاشتن، نه پاک‌کردن
+    await redirectOf(() => deleteManagerRecipientAction(form({ recipientId: provRow!.id })));
+    const excluded = (await db.select().from(s.managerSmsRecipients).where(eq(s.managerSmsRecipients.id, provRow!.id)))[0];
+    expect(excluded.excluded).toBe(true);
+    // همگام‌سازی بعدی او را دوباره نمی‌سازد و ردیفش دست‌نخورده می‌ماند
+    const result = await syncManagerRecipients(f.users.super.id);
+    expect(result.excludedSkipped).toBeGreaterThanOrEqual(1);
+    expect((await db.select().from(s.managerSmsRecipients).where(eq(s.managerSmsRecipients.id, provRow!.id)))[0].excluded).toBe(true);
+    // کنارگذاشته‌ها پیامکی دریافت نمی‌کنند
+    const entityId = randomUUID();
+    await dispatchCaseCreatedSms(entityId, "زهرا موسوی");
+    expect((await eventsOf(entityId)).map((item) => item.phone)).not.toContain(PHONES.prov);
+    // بازگردانی → به فهرست برمی‌گردد و همگام‌سازی اطلاعات را از حسابش تازه می‌کند
+    await redirectOf(() => restoreManagerRecipientAction(form({ recipientId: provRow!.id })));
+    expect((await db.select().from(s.managerSmsRecipients).where(eq(s.managerSmsRecipients.id, provRow!.id)))[0].excluded).toBe(false);
+    await syncManagerRecipients(f.users.super.id);
+    const refreshed = (await db.select().from(s.managerSmsRecipients).where(eq(s.managerSmsRecipients.id, provRow!.id)))[0];
+    expect(refreshed.excluded).toBe(false);
+    expect(refreshed.fullName).toBe("مدیر استان تهران نام‌تازه");
   }, 40_000);
 
   it("ارسال مجدد ناموفق‌ها تلاش می‌کند و خطای واقعی پنل را ثبت می‌کند", async () => {

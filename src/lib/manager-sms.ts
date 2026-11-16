@@ -18,6 +18,7 @@ export type ManagerSyncResult = {
   added: number;
   updated: number;
   removed: number;
+  excludedSkipped: number;
   duplicates: string[];
   errors: string[];
 };
@@ -64,6 +65,7 @@ export async function syncManagerRecipients(actorId?: string | null): Promise<Ma
   const seen = new Set<string>();
   let added = 0;
   let updated = 0;
+  let excludedSkipped = 0;
   for (const candidate of valid) {
     // جلوگیری از شمارهٔ تکراری حتی اگر دو حساب مختلف همان شماره را داشته باشند
     if (seen.has(candidate.phone)) {
@@ -72,6 +74,11 @@ export async function syncManagerRecipients(actorId?: string | null): Promise<Ma
     }
     seen.add(candidate.phone);
     const current = bySource.get(candidate.sourceUserId);
+    // الحاقیهٔ ۲.۱۶.۱ — مدیر کنارگذاشته با حذف، در همگام‌سازی‌های بعدی بازنمی‌گردد
+    if (current && current.excluded) {
+      excludedSkipped += 1;
+      continue;
+    }
     const phoneOwner = byPhone.get(candidate.phone);
     if (current && current.id !== phoneOwner?.id && phoneOwner) {
       duplicates.push(`شمارهٔ جدید «${candidate.fullName}» (${candidate.phone}) پیش‌تر برای «${phoneOwner.fullName}» ثبت شده است؛ شمارهٔ او به‌روز نشد.`);
@@ -100,10 +107,11 @@ export async function syncManagerRecipients(actorId?: string | null): Promise<Ma
     }
   }
   // ردیف‌های خودکاری که منبعشان دیگر مدیر فعال سامانه نیست، حذف می‌شوند
+  // (ردیف‌های کنارگذاشته به‌عمد دست‌نخورده می‌مانند تا بازگردانی ممکن بماند)
   const validSources = new Set(valid.map((item) => item.sourceUserId));
-  const stale = existing.filter((row) => row.source === "auto" && row.sourceUserId && !validSources.has(row.sourceUserId));
+  const stale = existing.filter((row) => row.source === "auto" && !row.excluded && row.sourceUserId && !validSources.has(row.sourceUserId));
   if (stale.length) await db.delete(managerSmsRecipients).where(inArray(managerSmsRecipients.id, stale.map((row) => row.id)));
-  return { identified, added, updated, removed: stale.length, duplicates, errors };
+  return { identified, added, updated, removed: stale.length, excludedSkipped, duplicates, errors };
 }
 
 /** قالب متن پیامک ثبت پرونده (متغیرها از رجیستری/دیتابیس قالب‌ها). */
@@ -120,7 +128,8 @@ export async function dispatchCaseCreatedSms(entityId: string, registrantName: s
   try {
     const [settings] = await db.select().from(managerSmsSettings).where(eq(managerSmsSettings.id, "default"));
     if (settings && !settings.autoCaseCreated) return;
-    const recipients = await db.select().from(managerSmsRecipients).where(eq(managerSmsRecipients.smsEnabled, true));
+    // کنارگذاشته‌ها (حذف‌شده‌های همگام‌شده) هرگز پیامک نمی‌گیرند
+    const recipients = await db.select().from(managerSmsRecipients).where(and(eq(managerSmsRecipients.smsEnabled, true), eq(managerSmsRecipients.excluded, false)));
     if (!recipients.length) return;
     const body = await resolveSmsTemplate("manager_case_created", managerCaseCreatedVars(registrantName, new Date()));
     const message = body?.body ?? "مدیر محترم، یک پرونده جدید در سامانه نور ثبت شد.\nلطفاً جهت بررسی به پنل مدیریت مراجعه فرمایید.";
