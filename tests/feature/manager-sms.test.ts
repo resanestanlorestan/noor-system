@@ -19,9 +19,23 @@ import { addManagerRecipientAction, resendManagerEventAction, restoreManagerReci
 import { saveCustomRoleAction, deleteCustomRoleAction } from "@/app/actions/permissions";
 
 let f: Fixture;
-beforeAll(async () => { f = await featureSeed(); }, 30_000);
+// ایزوله‌سازی بین‌فایلی: شماره‌های اصلی فیکسچر ذخیره و در afterAll بازگردانده
+// می‌شوند تا فایل‌های موازی دیگر (exports/reminders) که انتظار کاربر بی‌شماره
+// دارند با دیتابیس آلوده روبه‌رو نشوند.
+const phoneKeys = ["super", "prov", "county", "provFars", "rev"] as const;
+const originalPhones: Record<string, string | null> = {};
+beforeAll(async () => {
+  f = await featureSeed();
+  for (const key of phoneKeys) {
+    const [row] = await db.select({ phone: s.users.phone }).from(s.users).where(eq(s.users.id, f.users[key].id));
+    originalPhones[key] = row?.phone ?? null;
+  }
+}, 30_000);
 beforeEach(resetCaseData);
-afterAll(closeDb);
+afterAll(async () => {
+  if (f) for (const key of phoneKeys) await setPhone(key, originalPhones[key]);
+  await closeDb();
+});
 
 const PHONES: Record<"super" | "prov" | "county" | "provFars", string> = {
   super: "09363330001", prov: "09363330002", county: "09363330003", provFars: "09363330004",

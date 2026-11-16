@@ -6,10 +6,11 @@ import "./env";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { redirectOf, messageOf, form, featureSeed, loginAs, resetCaseData, closeDb, FEATURE_PASSWORD, type Fixture } from "./helpers";
+import { redirectOf, messageOf, caseIdOf, form, completeProfile, featureSeed, loginAs, resetCaseData, closeDb, FEATURE_PASSWORD, type Fixture } from "./helpers";
 import { hashPassword } from "@/lib/auth";
+import { saveCaseCore } from "@/lib/case-save";
 import { deleteUserAction, toggleUserAction, updateStaffAction } from "@/app/actions/management";
-import { inArray, or } from "drizzle-orm";
+import { inArray, or, and } from "drizzle-orm";
 
 let f: Fixture;
 
@@ -80,35 +81,61 @@ describe("حذف حساب کاربر — گاردهای سروری", () => {
     expect(still).toBeDefined();
   });
 
-  it("حساب متصل به ممیزی: حذف امن (گمنام‌سازی) با پاک‌سازی هویت و مسدودسازی ورود", async () => {
+  it("حساب فقط متصل به ممیزی: الحاقیهٔ ۲.۱۷.۰ — حذف کامل با گمنام‌سازی ردپای ممیزی خودش", async () => {
     const actor = await loginAs("super");
     const target = await makeUser();
-    const oldHash = (await db.select({ hash: s.users.passwordHash }).from(s.users).where(eq(s.users.id, target.id)))[0].hash;
     await db.insert(s.auditLogs).values({ actorId: target.id, action: "login", targetType: "user", targetId: target.id });
     await db.insert(s.sessions).values({ tokenHash: "e".repeat(64), userId: target.id, expiresAt: new Date(Date.now() + 86_400_000) });
     const url = await redirectOf(() => deleteUserAction(form({ userId: target.id })));
-    expect(messageOf(url)).toContain("امن حذف شد");
+    expect(messageOf(url)).toContain("کامل حذف شد");
+    expect(messageOf(url)).toContain("ثبت‌نام مجدد");
+    // ردیف حساب کامل حذف شده است
+    expect(await db.select({ id: s.users.id }).from(s.users).where(eq(s.users.id, target.id))).toHaveLength(0);
+    // نشست‌ها پاک شده‌اند
+    expect((await db.select({ token: s.sessions.tokenHash }).from(s.sessions).where(eq(s.sessions.userId, target.id)))).toHaveLength(0);
+    // ردپای ممیزی خودش حفظ شده ولی ارتباطش با حساب حذف‌شده گمنام است
+    // (لاگ «حذف حساب» با targetId همین حساب جداگانه است و در شمارش نمی‌آید)
+    const prior = await db.select().from(s.auditLogs).where(and(eq(s.auditLogs.targetId, target.id), eq(s.auditLogs.action, "login")));
+    expect(prior.length).toBe(1);
+    expect(prior[0].actorId).toBeNull();
+    const logs = await db.select().from(s.auditLogs).where(eq(s.auditLogs.action, "delete_user"));
+    expect(logs.some((log) => log.actorId === actor.id && log.targetId === target.id)).toBe(true);
+  });
+
+  it("کاربر نقش‌داشته در پروندهٔ دیگران: حذف امن (گمنام‌سازی) و سپس گاردهای حساب گمنام", async () => {
+    // پروندهٔ واقعی متعلق به کاربر «act» فیکسچر ساخته می‌شود
+    await loginAs("act");
+    const caseId = caseIdOf(await redirectOf(() => saveCaseCore(completeProfile(f))));
+    const actor = await loginAs("super");
+    const target = await makeUser();
+    // کاربر به‌عنوان کارشناس پروندهٔ دیگری منصوب می‌شود → زنجیرهٔ کاری دیگران
+    await db.update(s.applications).set({ assignedExpertId: target.id }).where(eq(s.applications.id, caseId));
+    await db.insert(s.auditLogs).values({ actorId: target.id, action: "login", targetType: "user", targetId: target.id });
+    const url = await redirectOf(() => deleteUserAction(form({ userId: target.id })));
+    expect(messageOf(url)).toContain("محو");
     const [row] = await db.select().from(s.users).where(eq(s.users.id, target.id));
-    expect(row).toBeDefined();
     expect(row.deletedAt).not.toBeNull();
     expect(row.active).toBe(false);
-    expect(row.email).toBeNull();
     expect(row.phone).toBeNull();
-    expect(row.fullName).toContain("حساب حذف‌شده");
-    expect(row.passwordHash).not.toBe(oldHash);
-    expect(row.mfaEnabled).toBe(false);
     const [session] = await db.select().from(s.sessions).where(eq(s.sessions.userId, target.id));
     expect(session).toBeUndefined();
     const logs = await db.select().from(s.auditLogs).where(eq(s.auditLogs.action, "anonymize_user"));
     expect(logs.some((log) => log.actorId === actor.id && log.targetId === target.id)).toBe(true);
-    // ممیزیِ قبلی کاربر دست‌نخورده می‌ماند (اتریبیوشن «حساب حذف‌شده» در صفحهٔ ممیزی)
+    // ممیزیِ قبلی کاربر با ارتباطش حفظ می‌ماند (حساب گمنام ردیف دارد)
     const prior = await db.select().from(s.auditLogs).where(eq(s.auditLogs.actorId, target.id));
     expect(prior.length).toBe(1);
+    // ارجاع کاری پروندهٔ دیگران حفظ شده است
+    const [appAfter] = await db.select({ expert: s.applications.assignedExpertId }).from(s.applications).where(eq(s.applications.id, caseId));
+    expect(appAfter.expert).toBe(target.id);
+    await db.update(s.applications).set({ assignedExpertId: null }).where(eq(s.applications.id, caseId));
   });
 
   it("حساب گمنام‌شده دوباره قابل حذف نیست و ویرایش/تغییر وضعیت آن رد می‌شود", async () => {
+    await loginAs("act");
+    const caseId = caseIdOf(await redirectOf(() => saveCaseCore(completeProfile(f))));
     await loginAs("super");
     const target = await makeUser();
+    await db.update(s.applications).set({ assignedExpertId: target.id }).where(eq(s.applications.id, caseId));
     await db.insert(s.auditLogs).values({ actorId: target.id, action: "login", targetType: "user", targetId: target.id });
     await redirectOf(() => deleteUserAction(form({ userId: target.id })));
     const again = await redirectOf(() => deleteUserAction(form({ userId: target.id })));
@@ -117,5 +144,6 @@ describe("حذف حساب کاربر — گاردهای سروری", () => {
     expect(messageOf(toggle)).toContain("امن حذف شده");
     const edit = await updateStaffAction({} as never, form({ userId: target.id, firstName: "ع", lastName: "ب", role: "reviewer", phone: "۰۹۱۲۱۲۳۴۵۶۷", provinceId: String(f.tehranProvinceId) }));
     expect(edit.error).toContain("امن حذف شده");
+    await db.update(s.applications).set({ assignedExpertId: null }).where(eq(s.applications.id, caseId));
   });
 });

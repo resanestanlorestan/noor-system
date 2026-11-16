@@ -70,6 +70,9 @@ describe("ساخت کتاب اکسل", () => {
     await overdueCase({ ageDays: 20 });
     await overdueCase({ ageDays: 25, assigned: false });
     await overdueCase({ ageDays: 5 }); // fresh — must not appear
+    // پیش‌شرط صریح این آزمون: ثبت‌کنندهٔ سازمانی (prov) شماره‌ای در پرونده ندارد؛
+    // فایل‌های موازی ممکن است شمارهٔ فیکسچر را موقتاً ست کرده باشند.
+    await db.update(s.users).set({ phone: null }).where(eq(s.users.id, f.users.prov.id));
     await loginAs("prov");
     const response = await exportWorkbook("14");
     expect(response.status).toBe(200);

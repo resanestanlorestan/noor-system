@@ -126,6 +126,9 @@ describe("محدوده جغرافیایی و گیرنده جایگزین", () =>
   });
 
   it("بدون کارشناس، ثبت‌کننده سازمانی گیرنده است؛ ثبت‌کننده فعال خودش گیرنده می‌شود", async () => {
+    // پیش‌شرط صریح: prov در فیکسچر شماره ندارد (فقط اعلان)؛ فایل‌های موازی
+    // ممکن است شمارهٔ فیکسچر را موقتاً ست کرده باشند.
+    await db.update(s.users).set({ phone: null }).where(eq(s.users.id, f.users.prov.id));
     // staff-created, unassigned → the province admin (creator) gets the reminder
     const { application: staffCase } = await overdueCase({ assigned: false });
     // self-registered, unassigned → the activist's own user gets the reminder

@@ -7,6 +7,7 @@ import { stashFlash } from "@/lib/flash";
 import { db } from "@/db";
 import { activistOrganizations, activistWritings, activists, activityRecords, appeals, applicationVersions, applications, auditLogs, certificates, correctionRequests, counties, customRoles, documents, documentRequests, educationRecords, educationalCourses, emailVerificationTokens, events, expertNotes, expertReferrals, mfaRecoveryCodes, messageBroadcasts, messageOutbox, notifications, organizations, passwordResetTokens, pendingMfaSessions, provinces, sessions, specialties, statusHistory, userSpecialties, users, workHistory } from "@/db/schema";
 import { syncManagerRecipients } from "@/lib/manager-sms";
+import { purgeUserAccount, removeUserFiles } from "@/lib/user-purge";
 import { audit, hashPassword, requireUser } from "@/lib/auth";
 import { normalizeDigits, normalizeText } from "@/lib/format";
 import { validIranMobile, validPasswordFormat, PASSWORD_POLICY_ERROR } from "@/lib/validation";
@@ -206,11 +207,15 @@ export async function addOrganizationAction(_state: ActionState, data: FormData)
   revalidatePath("/settings"); return { success: "سازمان جدید به فهرست اضافه شد." };
 }
 
-/** الحاقیهٔ ۲.۱۰.۲ — حذف حساب کاربر با دو مسیر؛ فقط مدیر کل سامانه و فقط
- *  برای حساب‌های دیگر. حساب بدون داده: حذف کامل ردیف به‌همراه نشست‌ها و
- *  توکن‌ها. حساب متصل به داده (پرونده، ممیزی، پیام، رویداد و…): حذف امن
- *  به‌جای حذف کامل — گمنام‌سازی هویت، بی‌اثرکردن گذرواژه و MFA، غیرفعال‌سازی
- *  و خروج از فهرست، با حفظ ردپای ممیزی. حذف حساب مدیر کل ممنوع است. */
+/** الحاقیهٔ ۲.۱۷.۰ — حذف یکپارچهٔ حساب کاربر؛ فقط مدیر کل سامانه و فقط برای
+ *  حساب‌های دیگر. همهٔ داده‌های متعلق به کاربر — پرونده و رکورد فعال، تخصص‌ها،
+ *  تحصیلات، سوابق شغلی و همکاری، دوره‌ها، گواهی‌ها، مدارک و فایل‌های پیوست،
+ *  نشست‌ها و توکن‌ها و پیام‌های شخصی — در یک تراکنش امن حذف می‌شوند تا هیچ
+ *  بخشی ناقص نماند و کد ملی و شمارهٔ موبایل برای ثبت‌نام مجدد آزاد شود.
+ *  تنها استثنا: اگر کاربر در روند کاری پروندهٔ «دیگران» نقش داشته باشد
+ *  (کارشناس، ثبت‌کننده، نویسندهٔ یادداشت و…) ردیف حساب کامل حذف نمی‌شود تا
+ *  دادهٔ کاربران دیگر نشکند؛ آن ردیف با حفظ زنجیرهٔ ممیزی گمنام می‌شود ولی
+ *  دادهٔ متعلق به خودش همان‌طور کامل پاک می‌شود. حذف حساب مدیر کل ممنوع است. */
 export async function deleteUserAction(data: FormData) {
   const actor = await requireUser(); const id = field(data, "userId", 40);
   const fail = (message: string) => redirect("/users?m=" + stashFlash(message));
@@ -219,62 +224,32 @@ export async function deleteUserAction(data: FormData) {
   if (!target) return fail("کاربر پیدا نشد.");
   if (target.role === "super_admin") return fail("حذف حساب مدیر کل سامانه مجاز نیست.");
   if (target.deletedAt) return fail("این حساب پیش‌تر به‌صورت امن حذف شده است.");
-  // شواهد استفادهٔ واقعی: وجود هر ردیف در این جدول‌ها یعنی حساب به دادهٔ ثبت‌شده متصل است
-  const usage = await Promise.all([
-    db.select({ id: activists.id }).from(activists).where(eq(activists.userId, id)).limit(1),
-    db.select({ id: applications.id }).from(applications).where(or(eq(applications.createdBy, id), eq(applications.assignedExpertId, id))).limit(1),
-    db.select({ id: statusHistory.id }).from(statusHistory).where(eq(statusHistory.actorId, id)).limit(1),
-    db.select({ id: documents.id }).from(documents).where(eq(documents.uploadedBy, id)).limit(1),
-    db.select({ id: auditLogs.id }).from(auditLogs).where(eq(auditLogs.actorId, id)).limit(1),
-    db.select({ id: expertReferrals.id }).from(expertReferrals).where(or(eq(expertReferrals.specialistId, id), eq(expertReferrals.requestedBy, id))).limit(1),
-    db.select({ id: correctionRequests.id }).from(correctionRequests).where(or(eq(correctionRequests.requestedBy, id), eq(correctionRequests.respondedBy, id))).limit(1),
-    db.select({ id: appeals.id }).from(appeals).where(or(eq(appeals.submittedBy, id), eq(appeals.assignedTo, id), eq(appeals.resolvedBy, id))).limit(1),
-    db.select({ id: expertNotes.id }).from(expertNotes).where(eq(expertNotes.authorId, id)).limit(1),
-    db.select({ id: applicationVersions.id }).from(applicationVersions).where(eq(applicationVersions.createdBy, id)).limit(1),
-    db.select({ id: activistWritings.id }).from(activistWritings).where(eq(activistWritings.createdBy, id)).limit(1),
-    db.select({ id: activistOrganizations.id }).from(activistOrganizations).where(eq(activistOrganizations.createdBy, id)).limit(1),
-    db.select({ id: activityRecords.id }).from(activityRecords).where(eq(activityRecords.createdBy, id)).limit(1),
-    db.select({ id: educationalCourses.id }).from(educationalCourses).where(eq(educationalCourses.createdBy, id)).limit(1),
-    db.select({ id: certificates.id }).from(certificates).where(eq(certificates.createdBy, id)).limit(1),
-    db.select({ id: educationRecords.id }).from(educationRecords).where(eq(educationRecords.createdBy, id)).limit(1),
-    db.select({ id: workHistory.id }).from(workHistory).where(eq(workHistory.createdBy, id)).limit(1),
-    db.select({ id: documentRequests.id }).from(documentRequests).where(eq(documentRequests.requestedBy, id)).limit(1),
-    db.select({ id: messageOutbox.id }).from(messageOutbox).where(eq(messageOutbox.userId, id)).limit(1),
-    db.select({ id: messageBroadcasts.id }).from(messageBroadcasts).where(eq(messageBroadcasts.sentBy, id)).limit(1),
-    db.select({ id: events.id }).from(events).where(eq(events.createdBy, id)).limit(1),
-  ]);
-  // مسیر اول — حذف امن (گمنام‌سازی): حساب متصل به داده کامل حذف نمی‌شود تا
-  // زنجیرهٔ ممیزی و کلیدهای خارجی سالم بماند؛ اطلاعات هویتی پاک، گذرواژه
-  // بی‌اثر، حساب غیرفعال و از فهرست خارج می‌شود و رویداد ممیزی ثبت می‌گردد.
-  if (usage.some(([row]) => row)) {
-    const shortId = id.slice(0, 8);
-    const unusablePasswordHash = await hashPassword(randomUUID());
-    await db.transaction(async (tx) => {
-      for (const table of [sessions, mfaRecoveryCodes, pendingMfaSessions, passwordResetTokens, emailVerificationTokens, userSpecialties, notifications]) {
-        await tx.delete(table).where(eq(table.userId, id));
-      }
+  const purge = await db.transaction(async (tx) => {
+    const outcome = await purgeUserAccount(tx, id);
+    const detail = `${target.role};cases=${outcome.cases};files=${outcome.storageKeys.length}`;
+    if (outcome.mode === "anonymized") {
+      const shortId = id.slice(0, 8);
+      const unusablePasswordHash = await hashPassword(randomUUID());
       await tx.update(users).set({
         fullName: `حساب حذف‌شده (${shortId})`, firstName: "حساب", lastName: "حذف‌شده",
         email: null, phone: null, active: false, passwordHash: unusablePasswordHash,
         mfaSecretCipher: null, mfaEnabled: false, mfaEnabledAt: null,
         customRoleId: null, deletedAt: new Date(),
       }).where(eq(users.id, id));
-      await tx.insert(auditLogs).values({ actorId: actor.id, action: "anonymize_user", targetType: "user", targetId: id, detail: target.role });
-    });
-    await syncManagerRecipients(actor.id).catch(() => {});
-    revalidatePath("/users");
-    return redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» به‌دلیل اتصال به داده‌های ثبت‌شده به‌صورت امن حذف شد: اطلاعات هویتی پاک، ورود مسدود و حساب از فهرست خارج شد؛ ردپای ممیزی آن حفظ ماند.`));
-  }
-  // مسیر دوم — حذف کامل: حساب بدون هیچ دادهٔ متصل است.
-  await db.transaction(async (tx) => {
-    for (const table of [sessions, mfaRecoveryCodes, pendingMfaSessions, passwordResetTokens, emailVerificationTokens, userSpecialties, notifications]) {
-      await tx.delete(table).where(eq(table.userId, id));
+      await tx.insert(auditLogs).values({ actorId: actor.id, action: "anonymize_user", targetType: "user", targetId: id, detail });
+    } else {
+      await tx.insert(auditLogs).values({ actorId: actor.id, action: "delete_user", targetType: "user", targetId: id, detail });
     }
-    await tx.delete(users).where(eq(users.id, id));
-    await tx.insert(auditLogs).values({ actorId: actor.id, action: "delete_user", targetType: "user", targetId: id, detail: target.role });
+    return outcome;
   });
+  // فایل‌های فیزیکی مدارک فقط پس از موفقیت تراکنش از دیسک پاک می‌شوند
+  await removeUserFiles(purge.storageKeys);
   // الحاقیهٔ ۲.۱۶.۰ — همگام‌سازی خودکار فهرست پیامکی مدیران پس از هر تغییر کاربر
   await syncManagerRecipients(actor.id).catch(() => {});
   revalidatePath("/users");
-  redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» به‌همراه نشست‌ها و اعلان‌هایش حذف شد.`));
+  const scope = purge.cases > 0 ? `${purge.cases} پرونده، مدارک و فایل‌های پیوست آن و همهٔ رکوردهای وابسته` : "همهٔ داده‌های وابسته";
+  if (purge.mode === "total") {
+    redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» به‌همراه ${scope} به‌طور کامل حذف شد؛ کد ملی و شمارهٔ موبایل او برای ثبت‌نام مجدد آزاد است.`));
+  }
+  redirect("/users?m=" + stashFlash(`حساب «${target.fullName}» و ${scope} حذف شد؛ چون در روند کاری پرونده‌های دیگر نقش داشته، ردپای ممیزی او با نام محو حفظ شده است. کد ملی و شمارهٔ موبایل او برای ثبت‌نام مجدد آزاد است.`));
 }
