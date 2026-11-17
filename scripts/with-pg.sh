@@ -21,7 +21,7 @@ setsid "$BIN/postgres" -D "$DATA" -p 5432 -c listen_addresses=127.0.0.1 -c fsync
 READY=0
 for i in $(seq 1 90); do
   if node -e "
-    const {Client} = require('/tmp/dumptool/node_modules/pg');
+    const {Client} = require('/home/z/my-project/node_modules/pg');
     const c = new Client({host:'127.0.0.1',port:5432,user:'noor',password:'noor_dev_2026',database:'postgres'});
     c.connect().then(async()=>{await c.query('select 1');await c.end();process.exit(0)})
     .catch(()=>process.exit(1));

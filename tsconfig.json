@@ -40,6 +40,13 @@
     "node_modules",
     "skills",
     "pgtmp",
-    "pgdata"
+    "pgdata",
+    "noor-system",
+    "noor-local-stage5-backup",
+    "attic",
+    "tool-results",
+    "recovered",
+    "scripts/pgserver",
+    "scripts/scripts"
   ]
 }

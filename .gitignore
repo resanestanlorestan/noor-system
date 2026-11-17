@@ -15,3 +15,17 @@ yarn-error.log*
 .DS_Store
 scripts/pg-tools/data/
 .pgdata-feature/
+# آرتیفکت‌های محلی سندباکس و ابزارهای موقت استقرار — هرگز در مخزن نمی‌آیند
+download/
+attic/
+tool-results/
+recovered/
+noor-system/
+noor-local-stage5-backup/
+scripts/diag-temp/
+scripts/pgserver/
+scripts/scripts/
+*.zip
+*.part
+*.b64
+tmp/
