@@ -4,7 +4,7 @@ import os, re, ssl, subprocess, sys
 import websocket
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-text = open(os.path.join(SCRIPT_DIR, "cpread.sh")).read()
+text = open(os.path.join(SCRIPT_DIR, ".cp-creds")).read()
 HOST = re.search(r"CP_HOST='([^']*)'", text).group(1)
 USER = re.search(r"CP_USER='([^']*)'", text).group(1)
 PASS = re.search(r"CP_PASS='([^']*)'", text).group(1)

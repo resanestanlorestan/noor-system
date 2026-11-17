@@ -3,8 +3,8 @@
 set -u
 HOST='89.39.208.254'
 USER='epqoisdl'
-PASS=$(grep -o "CP_PASS='[^']*'" /home/z/my-project/scripts/cpread.sh 2>/dev/null | cut -d"'" -f2)
-[ -z "$PASS" ] && PASS=$(grep -o "CP_PASS='[^']*'" /home/z/my-project/scripts/cpapi.sh | cut -d"'" -f2)
+PASS=$(grep -o "CP_PASS='[^']*'" /home/z/my-project/scripts/.cp-creds 2>/dev/null | cut -d"'" -f2)
+[ -z "$PASS" ] && PASS=$(grep -o "CP_PASS='[^']*'" /home/z/my-project/scripts/.cp-creds | cut -d"'" -f2)
 OUT=/tmp/recon2
 mkdir -p "$OUT"
 JAR=$OUT/jar.txt

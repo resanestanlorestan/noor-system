@@ -4,9 +4,10 @@
 #        cpuapi-cron.sh listlines
 #        cpuapi-cron.sh removeline <line-min> <line-hour> <line-day> <line-month> <line-weekday> <command>
 set -e
-CP_HOST='89.39.208.254'
-CP_USER='epqoisdl'
-CP_PASS='3p29A9ttKq'
+# اعتبارنامه‌ها از فایل محلیِ ردیابی‌نشده خوانده می‌شوند (گام ۲ — راز از مخزن حذف شد)
+CREDS_FILE="$(cd "$(dirname "$0")" && pwd)/.cp-creds"
+[ -r "$CREDS_FILE" ] || { echo "CREDS_MISSING: $CREDS_FILE" >&2; exit 1; }
+. "$CREDS_FILE"
 JAR=/tmp/cp-uapi-cr.jar
 
 login() {

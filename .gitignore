@@ -32,6 +32,7 @@ tmp/
 # گام ۵ — دادهٔ محلی PostgreSQL و ابزارهای موقت استقرار هرگز ردیابی نمی‌شوند
 pgdata/
 scripts/tmp-orch/
+scripts/.cp-creds
 scripts/host-*.php
 scripts/bisect*.mjs
 scripts/report-*.mjs

@@ -2,9 +2,9 @@
 # گرفتن نشست cPanel و چاپ فقط شناسهٔ cpsess (اعتبارنامه‌ها از cpread.sh خوانده می‌شوند، چاپ نمی‌شوند)
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CP_HOST=$(grep -o "CP_HOST='[^']*'" "$SCRIPT_DIR/cpread.sh" | cut -d"'" -f2)
-CP_USER=$(grep -o "CP_USER='[^']*'" "$SCRIPT_DIR/cpread.sh" | cut -d"'" -f2)
-CP_PASS=$(grep -o "CP_PASS='[^']*'" "$SCRIPT_DIR/cpread.sh" | cut -d"'" -f2)
+CP_HOST=$(grep -o "CP_HOST='[^']*'" ".cp-creds" | cut -d"'" -f2)
+CP_USER=$(grep -o "CP_USER='[^']*'" ".cp-creds" | cut -d"'" -f2)
+CP_PASS=$(grep -o "CP_PASS='[^']*'" ".cp-creds" | cut -d"'" -f2)
 JAR=/tmp/cp-session-$$.jar
 HDR=/tmp/cp-session-hdr-$$.txt
 trap 'rm -f "$JAR" "$HDR"' EXIT
