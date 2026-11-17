@@ -110,8 +110,8 @@ describe("مدیریت سابقه شغلی از صفحه پرونده", () => {
   });
 });
 
-describe("دوزیه رسمی", () => {
-  it("سابقه شغلی در داده دوزیه ظاهر می‌شود", async () => {
+describe("رزومه رسمی", () => {
+  it("سابقه شغلی در داده رزومه ظاهر می‌شود", async () => {
     const user = await loginAs("act");
     const url = await redirectOf(() => saveCaseCore(completeProfile(f, { workHistory: WORK_ROWS })));
     const caseId = caseIdOf(url);

@@ -341,7 +341,7 @@
 .writing-add-grid label { display:grid; gap:6px; color:var(--muted); font-size:11px; font-weight:600; }
 .writing-add-grid input, .writing-add-grid select { width:100%; min-height:38px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); color:var(--muted); font-size:11.5px; padding:8px 10px; }
 .writing-add-grid input:focus, .writing-add-grid select:focus { border-color:var(--line-strong); box-shadow:0 0 0 3px var(--ring); outline:none; }
-/* (مرحله چهارم) فهرست جزئیات تخصص در دوزیه چاپی */
+/* (مرحله چهارم) فهرست جزئیات تخصص در رزومه چاپی */
 .dossier-detail-list { list-style:none; margin:11px 0 0; padding:0; display:grid; gap:5px; }
 .dossier-detail-list li { font-size:11.5px; color:var(--ink-soft); line-height:1.9; }
 .dossier-detail-list li strong { color:var(--ink-soft); }
@@ -598,7 +598,7 @@
 .rank-medal { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; color:#fff; margin-right:6px; vertical-align:middle; }
 .ranking-table td { vertical-align:middle; }
 
-/* ---- Dossier (دوزیه رسمی — Release 2.3) ---- */
+/* ---- Dossier (رزومه رسمی — Release 2.3) ---- */
 .dossier-sheet { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:28px 32px; max-width:900px; margin:0 auto; }
 .dossier-header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2.5px solid var(--brand-text); padding-bottom:14px; }
 .dossier-brand strong { display:block; font-size:16px; color:var(--brand-text); }

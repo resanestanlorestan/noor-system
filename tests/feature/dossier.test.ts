@@ -35,7 +35,7 @@ async function dossierCase(options: { withUser?: boolean } = {}) {
   return { activist, application };
 }
 
-describe("دوزیه رسمی پرونده", () => {
+describe("رزومه رسمی پرونده", () => {
   it("مدیر هم‌محدوده همه بخش‌ها را می‌بیند و امتیاز محاسبه می‌شود", async () => {
     const { activist, application } = await dossierCase();
     await loginAs("prov");
@@ -55,13 +55,13 @@ describe("دوزیه رسمی پرونده", () => {
     expect(data!.history.length).toBeGreaterThan(0);
   });
 
-  it("مدیر استان دیگر به دوزیه دسترسی ندارد", async () => {
+  it("مدیر استان دیگر به رزومه دسترسی ندارد", async () => {
     const { application } = await dossierCase();
     await loginAs("provFars");
     expect(await loadDossier(f.users.provFars, application.id)).toBeNull();
   });
 
-  it("صاحب پرونده دوزیه پرونده خودش را می‌بیند", async () => {
+  it("صاحب پرونده رزومه پرونده خودش را می‌بیند", async () => {
     const { application } = await dossierCase({ withUser: true });
     await loginAs("act");
     const data = await loadDossier(f.users.act, application.id);

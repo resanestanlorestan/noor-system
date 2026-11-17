@@ -124,8 +124,8 @@ describe("مدیریت سابقه تحصیلی از صفحه پرونده", () =
   });
 });
 
-describe("دوزیه رسمی", () => {
-  it("تحصیلات و شغل در داده دوزیه ظاهر می‌شوند", async () => {
+describe("رزومه رسمی", () => {
+  it("تحصیلات و شغل در داده رزومه ظاهر می‌شوند", async () => {
     const user = await loginAs("act");
     const url = await redirectOf(() => saveCaseCore(completeProfile(f, { job: "معلم", educationRecords: EDUCATION_ROWS })));
     const caseId = caseIdOf(url);

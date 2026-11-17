@@ -1,6 +1,6 @@
 // آزمون‌های جریانی الحاقیهٔ ۲.۱۳.۰ — انتخاب تعاملی اجزای حفظ قرآن:
 // پنجرهٔ انتخاب ۳۰ جزء با تعداد دقیق، ذخیرهٔ شمارهٔ جزءها در دیتابیس،
-// نمایش در پروفایل (دوزیه) و مسدود شدن عدم تطابق تعداد در دو مسیر
+// نمایش در پروفایل (رزومه) و مسدود شدن عدم تطابق تعداد در دو مسیر
 // ثبت‌نام عمومی و ویزارد. همان الگوی رسمی آزمون‌های feature.
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -72,7 +72,7 @@ describe("الحاقیهٔ ۲.۱۳.۰ — اجزای حفظ در ویزارد و
     }
   }
 
-  it("ذخیره با اجزای دقیق، ویرایش اجزا و برچسب دوزیه", async () => {
+  it("ذخیره با اجزای دقیق، ویرایش اجزا و برچسب رزومه", async () => {
     const id = await memorizerId();
     await loginAs("act");
     const first = await runSave(completeProfile(f, {

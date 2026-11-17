@@ -30,12 +30,12 @@ export default async function DossierPage({ params }: { params: Promise<{ id: st
   const generatedAt = new Date();
 
   return <>
-    <div className="ws-breadcrumb no-print"><Link href="/cases">پرونده‌ها</Link><span> / </span><Link href={`/cases/${id}`}>جزئیات پرونده</Link><span> / </span><b>دوزیه رسمی</b></div>
-    <div className="ws-page-head no-print"><div><div className="ws-eyebrow"><span /> سند رسمی قابل چاپ</div><h1>دوزیه رسمی پرونده</h1><p>نسخه چاپی و PDF-شدنی خلاصه رسمی پرونده؛ همه داده‌ها از پرونده الکترونیکی و در محدوده دسترسی شما</p></div><div className="head-actions"><Link href={`/cases/${id}`} className="secondary-button"><ArrowRight size={16} /> بازگشت به پرونده</Link><PrintButton /></div></div>
+    <div className="ws-breadcrumb no-print"><Link href="/cases">پرونده‌ها</Link><span> / </span><Link href={`/cases/${id}`}>جزئیات پرونده</Link><span> / </span><b>رزومه رسمی</b></div>
+    <div className="ws-page-head no-print"><div><div className="ws-eyebrow"><span /> سند رسمی قابل چاپ</div><h1>رزومه رسمی پرونده</h1><p>نسخه چاپی و PDF-شدنی خلاصه رسمی پرونده؛ همه داده‌ها از پرونده الکترونیکی و در محدوده دسترسی شما</p></div><div className="head-actions"><Link href={`/cases/${id}`} className="secondary-button"><ArrowRight size={16} /> بازگشت به پرونده</Link><PrintButton /></div></div>
 
     <article className="dossier-sheet" dir="rtl">
       <header className="dossier-header">
-        <div className="dossier-brand"><strong>سامانه جامع فعالان قرآنی</strong><span>دوزیه رسمی پرونده قرآنی</span></div>
+        <div className="dossier-brand"><strong>سامانه جامع فعالان قرآنی</strong><span>رزومه رسمی پرونده قرآنی</span></div>
         <div className="dossier-meta">
           <span dir="ltr">شناسه پرونده: {data.caseId.slice(0, 8)}…</span>
           <span>تاریخ تهیه: {faLongDate(generatedAt)}</span>

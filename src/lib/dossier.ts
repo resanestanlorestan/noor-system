@@ -1,4 +1,4 @@
-// Formal case dossier (دوزیه رسمی پرونده — Release 2.3).
+// Formal case dossier (رزومه رسمی پرونده — Release 2.3).
 // One loader shared by the printable /cases/[id]/dossier page and the feature
 // tests: everything shown in the dossier is assembled here, strictly inside
 // the caller's geographic scope (via getCaseForUser).

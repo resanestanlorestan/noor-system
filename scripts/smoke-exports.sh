@@ -56,16 +56,16 @@ download_check "$SUPER" "$BASE/api/cases/export" "خروجی بانک پروند
 
 if curl -s -b "$SUPER" "$BASE/reminders" --max-time 20 | grep -q "خروجی اکسل"; then ok "دکمه خروجی اکسل در یادآور معوق‌ها"; else bad "دکمه خروجی اکسل در صفحه یادآور"; fi
 
-# --- دوزیه رسمی پرونده (Release 2.3) ---
+# --- رزومه رسمی پرونده (Release 2.3) ---
 CASE_ID=$(curl -s -b "$SUPER" "$BASE/cases" --max-time 20 | grep -oE '/cases/[0-9a-f-]{36}' | head -1 | cut -d/ -f3)
 if [ -n "$CASE_ID" ]; then
   code=$(curl -s -b "$SUPER" -o /dev/null -w "%{http_code}" "$BASE/cases/$CASE_ID/dossier" --max-time 20)
-  [ "$code" = "200" ] && ok "دوزیه رسمی پرونده برای مدیر کل" || bad "دوزیه رسمی → HTTP $code"
-  if curl -s -b "$SUPER" "$BASE/cases/$CASE_ID/dossier" --max-time 20 | grep -q "دوزیه رسمی پرونده قرآنی"; then ok "سربرگ رسمی دوزیه"; else bad "سربرگ دوزیه"; fi
+  [ "$code" = "200" ] && ok "رزومه رسمی پرونده برای مدیر کل" || bad "رزومه رسمی → HTTP $code"
+  if curl -s -b "$SUPER" "$BASE/cases/$CASE_ID/dossier" --max-time 20 | grep -q "رزومه رسمی پرونده قرآنی"; then ok "سربرگ رسمی رزومه"; else bad "سربرگ رزومه"; fi
   code=$(curl -s -b "$ACT" -o /dev/null -w "%{http_code}" "$BASE/cases/$CASE_ID/dossier" --max-time 20)
-  case "$code" in 30[127]|404) ok "دوزیه پرونده دیگر برای فعال قابل دسترسی نیست";; *) bad "گارد دوزیه برای فعال → $code";; esac
+  case "$code" in 30[127]|404) ok "رزومه پرونده دیگر برای فعال قابل دسترسی نیست";; *) bad "گارد رزومه برای فعال → $code";; esac
 else
-  bad "پرونده‌ای برای تست دوزیه یافت نشد"
+  bad "پرونده‌ای برای تست رزومه یافت نشد"
 fi
 
 echo "──────────────────────────────────────"

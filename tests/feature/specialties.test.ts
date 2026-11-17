@@ -157,8 +157,8 @@ describe("مدیریت آثار مؤلف از صفحه پرونده", () => {
   });
 });
 
-describe("دوزیه رسمی", () => {
-  it("جزئیات تخصص‌ها و آثار در داده دوزیه ظاهر می‌شوند", async () => {
+describe("رزومه رسمی", () => {
+  it("جزئیات تخصص‌ها و آثار در داده رزومه ظاهر می‌شوند", async () => {
     const user = await loginAs("act");
     const url = await redirectOf(() => saveCaseCore(completeProfile(f, { specialties: specialtiesList(), specialtyDetails: DETAILS, writings: WRITINGS })));
     const caseId = caseIdOf(url);
