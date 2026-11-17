@@ -1,0 +1,115 @@
+name: Release
+
+# انتشار روی تگ v* — همان قرارداد الحاقیه‌ها: v2.18.0، v2.19.0، ...
+# verify = همان نگهبان‌های CI (تایپ‌چک، لینت، مجموعهٔ کامل آزمون روی PostgreSQL واقعی)
+# package = بستهٔ اسلیم بی‌راز (سورس + بیلد standalone + static) و الصاق به GitHub Release
+# بستهٔ خروجی را می‌توان مستقیم از Releases دانلود و روی هاست استقرار داد —
+# بدون زیپ‌قطعه‌زنی و آپلود ۲۶قطعه‌ای Fileman.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # Feature tests (tests/feature/*) connect to a real PostgreSQL on
+    # 127.0.0.1:5432 — `npm test` recreates the noor_feature database from
+    # drizzle/ migrations and then runs the full suite against this service.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: noor
+          POSTGRES_PASSWORD: noor_dev_2026
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U noor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Typecheck
+        run: npx tsc --noEmit --pretty false
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Lint
+        run: npm run lint
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Full test suite (setup-feature-db + vitest)
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+          APP_ENCRYPTION_KEY: 4f1bd9c73a5e2b8c6d90e7f4a1c3b5d8e9f0a2c4b6d8e0f2a4c6b8d0e2f4a6c8
+
+  package:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+      - name: Production build (standalone)
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
+          APP_ENCRYPTION_KEY: 4f1bd9c73a5e2b8c6d90e7f4a1c3b5d8e9f0a2c4b6d8e0f2a4c6b8
+      - name: Assemble slim package (no secrets — same layout as build-slim-package-2180)
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          STAGE_ROOT="$(mktemp -d)"
+          STAGE="$STAGE_ROOT/noor-system"
+          mkdir -p "$STAGE"
+          rsync -a \
+            --exclude node_modules --exclude .next --exclude .git \
+            --exclude .env --exclude .private-app --exclude '*.log' \
+            --exclude tsconfig.tsbuildinfo \
+            --exclude upload --exclude download --exclude pgtmp --exclude pgdata \
+            --exclude scripts/pg-tools --exclude scripts/pgserver --exclude scripts/scripts \
+            --exclude noor-system --exclude skills --exclude tests --exclude scripts-recovered \
+            --exclude attic --exclude tool-results --exclude recovered \
+            --exclude 'scripts/cp*.sh' --exclude 'scripts/cp-*.py' --exclude 'scripts/cpuapi*' \
+            --exclude scripts/state-read-2180.sh --exclude scripts/upload-2180.sh \
+            --exclude scripts/drive-2180.sh --exclude scripts/probe-2180.sh \
+            --exclude scripts/cron-read-2180.sh --exclude scripts/fetch-tools-2180.sh \
+            --exclude scripts/diag-temp --exclude scripts/bundle-parts-2180 \
+            --exclude 'noor-slim-*.zip' \
+            "$GITHUB_WORKSPACE"/ "$STAGE"/
+          mkdir -p "$STAGE/.next/standalone/.next/static"
+          cp -a .next/standalone/. "$STAGE/.next/standalone/"
+          cp -a .next/static/. "$STAGE/.next/standalone/.next/static/"
+          rm -rf "$STAGE/.next/standalone/.private-app" "$STAGE/.next/standalone/.env"
+          (cd "$STAGE_ROOT" && zip -qr "$GITHUB_WORKSPACE/noor-slim-$TAG.zip" noor-system)
+          sha256sum "$GITHUB_WORKSPACE/noor-slim-$TAG.zip" > "$GITHUB_WORKSPACE/noor-slim-$TAG.zip.sha256"
+          ls -la "$GITHUB_WORKSPACE"/noor-slim-*
+      - name: Create GitHub Release with the slim package
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            noor-slim-*.zip
+            noor-slim-*.zip.sha256
+          body: |
+            بستهٔ اسلیم انتشار — سورس + بیلد standalone، بدون هیچ رازی (بدون .env).
+            نصب: استخراج در ~/noor-system، قرار دادن .env (طبق CPANEL-SETUP.md) و اجرای server.js.
