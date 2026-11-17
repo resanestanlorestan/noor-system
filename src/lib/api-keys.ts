@@ -53,7 +53,12 @@ function rateLimit(keyId: string, limit: number) {
 }
 
 function clientIp(request: Request) {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "";
+  // الحاقیهٔ ۲.۱۸.۰ — آخرین hop معتمد به‌جای نخستین مقدار X-Forwarded-For؛
+  // وب‌سرور IP واقعی کلاینت را به انتهای این سرآیند می‌افزاید و مقدار نخست
+  // از سوی کلاینت قابل جعل است (ممیزی امنیتی ۲.۱۷.۱ یافتهٔ F3).
+  const hops = request.headers.get("x-forwarded-for")?.split(",").map((h) => h.trim()).filter(Boolean) ?? [];
+  if (hops.length) return hops[hops.length - 1];
+  return request.headers.get("x-real-ip") || "";
 }
 
 export type IncomingGuard = { ok: true; key: typeof apiKeys.$inferSelect } | { ok: false; response: Response };

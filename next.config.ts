@@ -37,6 +37,9 @@ if (!isPostgresUrl(process.env.DATABASE_URL)) {
 // frame-ancestors directive in the middleware. Default stays strict (DENY).
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
+  // الحاقیهٔ ۲.۱۸.۰ — HSTS (ممیزی امنیتی ۲.۱۷.۱ یافتهٔ F4)؛ مرحلهٔ نخست بدون
+  // includeSubDomains تا پایداری HTTPS در همهٔ زیردامنه‌ها محرز شود.
+  { key: "Strict-Transport-Security", value: "max-age=31536000" },
   ...(process.env.DEMO_EMBED === "1" ? [] : [{ key: "X-Frame-Options", value: "DENY" }]),
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },

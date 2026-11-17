@@ -1,6 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { auditLogs, customRoles, loginAttempts, messageOutbox, sessions, users } from "@/db/schema";
@@ -68,9 +68,10 @@ export async function audit(actorId: string | null, action: string, targetType: 
   await db.insert(auditLogs).values({ actorId, action, targetType, targetId: targetId || null, detail: detail || null });
 }
 export async function throttleKey(identifier: string) {
-  const requestHeaders = await headers();
-  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip") || "local";
-  return digest(`${identifier.toLowerCase()}|${ip}`);
+  // الحاقیهٔ ۲.۱۸.۰ — کلید قفل فقط بر شناسهٔ حساب بسته می‌شود؛ مقدار نخست
+  // X-Forwarded-For از سوی کلاینت قابل جعل است و چرخاندن آن پنجرهٔ تازهٔ
+  // تلاش می‌ساخت (ممیزی امنیتی ۲.۱۷.۱ یافتهٔ F3).
+  return digest(identifier.toLowerCase());
 }
 export async function isThrottled(key: string) {
   const [row] = await db.select().from(loginAttempts).where(eq(loginAttempts.identityHash, key)).limit(1);

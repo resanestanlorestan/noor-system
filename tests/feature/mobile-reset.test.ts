@@ -42,9 +42,9 @@ async function resetFixture() {
   userId = created.id;
 }
 
-const TEST_IP = "127.0.0.1"; // matches the mocked x-forwarded-for header in helpers
+/** کلیدهای قفل با طرح جدید (الحاقیهٔ ۲.۱۸.۰) فقط بر شناسه بسته می‌شوند — بدون IP. */
 async function clearThrottle() {
-  const keys = [`pwresetm:${PHONE}`, `pwapplym:${PHONE}`].map((id) => digest(`${id}|${TEST_IP}`));
+  const keys = [`pwresetm:${PHONE}`, `pwapplym:${PHONE}`].map((id) => digest(id));
   await db.delete(s.loginAttempts).where(inArray(s.loginAttempts.identityHash, keys));
 }
 
