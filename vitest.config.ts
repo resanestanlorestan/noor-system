@@ -12,6 +12,10 @@ export default defineConfig({
     // quranic_activists.user_id. Files must run one at a time — deterministic
     // locally and in CI alike.
     fileParallelism: false,
+    // یک لنگِ لحظه‌ای زیرساختی نباید کل فایل آزمون را بکشد؛ سقف پیش‌فرض ۵
+    // ثانیه‌ای vitest برای آزمون‌های feature روی دیتابیس واقعیِ شلوغ کم است.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

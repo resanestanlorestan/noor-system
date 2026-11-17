@@ -112,6 +112,17 @@ const CASE_TABLES = [
 
 /** Truncates all workflow tables, keeping the seeded users and reference data. */
 export async function resetCaseData() {
+  // اتصال‌های جاماندهٔ idle in transaction (مثلاً پس از یک hang زیرساختی یا
+  // شکست نیمه‌کارهٔ آزمون قبلی) مانع truncate می‌شوند و کل فایل آزمون را
+  // می‌کشند؛ پیش از truncate بسته می‌شوند. فقط اتصال‌های معلق بسته می‌شوند —
+  // اتصال‌های idle استخر فعلی دست‌نخورده می‌مانند.
+  await db.execute(sql`
+    select pg_terminate_backend(pid)
+    from pg_stat_activity
+    where datname = current_database()
+      and pid <> pg_backend_pid()
+      and state like 'idle in transaction%'
+  `);
   await db.execute(sql.raw(`truncate table ${CASE_TABLES.join(", ")} restart identity cascade`));
   jar.clear();
 }
