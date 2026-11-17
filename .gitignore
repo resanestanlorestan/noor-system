@@ -37,3 +37,4 @@ scripts/host-*.php
 scripts/bisect*.mjs
 scripts/report-*.mjs
 scripts/bundle-parts-*/
+scripts/deploy-2182/
