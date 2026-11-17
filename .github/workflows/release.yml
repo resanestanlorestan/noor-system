@@ -75,6 +75,14 @@ jobs:
         env:
           DATABASE_URL: postgresql://noor:noor_dev_2026@127.0.0.1:5432/noor_feature
           APP_ENCRYPTION_KEY: 4f1bd9c73a5e2b8c6d90e7f4a1c3b5d8e9f0a2c4b6d8e0f2a4c6b8
+      - name: Sync next/dist/compiled into standalone (fix trace gap — الحاقیهٔ ۲.۱۸.۳)
+        run: |
+          set -euo pipefail
+          # trace در برخی بیلدها پوشه‌های compiled (webpack، @babel/runtime و …) را
+          # جا می‌اندازد و بوت سرور با MODULE_NOT_FOUND کرش می‌کند؛ نصب کامل npm-ci
+          # همیشه کامل است — پس کل compiled روی standalone سینک می‌شود.
+          cp -a node_modules/next/dist/compiled/. .next/standalone/node_modules/next/dist/compiled/
+          find .next/standalone/node_modules/next/dist/compiled -type f | wc -l
       - name: Assemble slim package (no secrets — same layout as build-slim-package-2180)
         run: |
           set -euo pipefail
@@ -95,6 +103,7 @@ jobs:
             --exclude scripts/drive-2180.sh --exclude scripts/probe-2180.sh \
             --exclude scripts/cron-read-2180.sh --exclude scripts/fetch-tools-2180.sh \
             --exclude scripts/diag-temp --exclude scripts/bundle-parts-2180 \
+            --exclude scripts/deploy-2182 \
             --exclude 'noor-slim-*.zip' \
             "$GITHUB_WORKSPACE"/ "$STAGE"/
           mkdir -p "$STAGE/.next/standalone/.next/static"
