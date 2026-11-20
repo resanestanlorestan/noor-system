@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, uuid, varchar, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { boolean, customType, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, uuid, varchar, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { SmsCategory } from "@/lib/sms-templates";
 
 export const roleEnum = pgEnum("app_role", ["super_admin", "province_admin", "county_admin", "reviewer", "specialist", "activist"]);
@@ -735,3 +735,21 @@ export const siteContentRevisions = pgTable("site_content_revisions", {
   changedBy: uuid("changed_by").references(() => users.id, { onDelete: "set null" }),
   changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("site_content_revisions_key_idx").on(table.key, table.changedAt)]);
+
+/** نوع باینری postgres برای نگهداری بایت‌های فایل لوگو. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+/** الحاقیهٔ ۲.۱۸.۵ — تنظیمات سایت (فعلاً فقط لوگو): بایت‌های فایل + متادیتای
+ * نمایش. URL سرو، در کد از روی updatedAt ساخته می‌شود تا کش مرورگر با هر
+ * تغییر باطل شود و تا پیش از آپلود همه‌جا آیکن پیش‌فرض نمایش داده می‌شود. */
+export const siteSettings = pgTable("site_settings", {
+  id: integer("id").primaryKey().default(1),
+  logoData: bytea("logo_data"),
+  logoMime: varchar("logo_mime", { length: 60 }),
+  logoName: varchar("logo_name", { length: 180 }),
+  logoWidth: integer("logo_width"),
+  logoHeight: integer("logo_height"),
+  logoSize: integer("logo_size"),
+  logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
+  logoUpdatedBy: uuid("logo_updated_by").references(() => users.id, { onDelete: "set null" }),
+});

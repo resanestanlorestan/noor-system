@@ -2,12 +2,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, FileClock, FileText, History, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, PenLine, PhoneCall, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, FileClock, FileText, History, Image as ImageIcon, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, PenLine, PhoneCall, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { roleLabels, type UserRole } from "@/lib/constants";
 
-export function WorkspaceShell({ name, role, customRoleLabel, permissions, today, unread, photoUrl, brandTitle = "سامانه نور", brandSubtitle = "جامع فعالان قرآنی", topbarTitle = "سامانه جامع فعالان قرآنی", searchPlaceholder = "جست‌وجو در پرونده‌ها...", children }: { name: string; role: UserRole; customRoleLabel?: string | null; permissions: string[]; today: string; unread: number; photoUrl?: string | null; brandTitle?: string; brandSubtitle?: string; topbarTitle?: string; searchPlaceholder?: string; children: React.ReactNode }) {
+export function WorkspaceShell({ name, role, customRoleLabel, permissions, today, unread, photoUrl, brandTitle = "سامانه نور", brandSubtitle = "جامع فعالان قرآنی", topbarTitle = "سامانه جامع فعالان قرآنی", searchPlaceholder = "جست‌وجو در پرونده‌ها...", logoUrl = null, children }: { name: string; role: UserRole; customRoleLabel?: string | null; permissions: string[]; today: string; unread: number; photoUrl?: string | null; brandTitle?: string; brandSubtitle?: string; topbarTitle?: string; searchPlaceholder?: string; logoUrl?: string | null; children: React.ReactNode }) {
   const [open, setOpen] = useState(false); const pathname = usePathname();
   // قفل اسکرول پشت منو + بستن با کلید Escape — منو باید روی موبایل «ثابت» و پاسخ‌گو بماند
   useEffect(() => {
@@ -32,6 +32,7 @@ export function WorkspaceShell({ name, role, customRoleLabel, permissions, today
     { href: "/broadcasts", label: "پیام گروهی", icon: Megaphone, allowed: allowed("messages.broadcast") },
     { href: "/sms", label: "مدیریت پیامک‌ها", icon: MessageSquareText, allowed: allowed("sms.manage") },
     { href: "/cms", label: "مدیریت محتوای سایت", icon: PenLine, allowed: allowed("cms.manage") },
+    { href: "/cms/logo", label: "لوگوی سایت", icon: ImageIcon, allowed: allowed("cms.manage") },
     { href: "/events", label: "رویدادها", icon: CalendarDays, allowed: allowed("events.manage") },
     { href: "/users", label: "مدیریت کاربران", icon: UsersRound, allowed: allowed("users.manage") },
     { href: "/permissions", label: "نقش‌ها و مجوزها", icon: ShieldCheck, allowed: allowed("permissions.manage") },
@@ -47,7 +48,7 @@ export function WorkspaceShell({ name, role, customRoleLabel, permissions, today
   // حذف ناگهانی آن هنگام بستن منو باعث پدیدهٔ «لایهٔ منجمد» و نوار سفید چسبیده در برخی مرورگرهای موبایل می‌شد.
   return <div className="ws-app">
     <button type="button" className={`ws-backdrop ${open ? "is-open" : ""}`} aria-label="بستن منو" aria-hidden={!open} tabIndex={-1} onClick={() => setOpen(false)} />
-    <aside id="ws-sidebar-nav" className={`ws-sidebar ${open ? "is-open" : ""}`}><div className="ws-sidebar-brand"><Link href="/dashboard" className="workspace-brand"><span><BookOpenText size={23} /></span><div><strong>{brandTitle}</strong><small>{brandSubtitle}</small></div></Link><button className="ws-close" aria-label="بستن منو" onClick={() => setOpen(false)}><X size={20} /></button></div>
+    <aside id="ws-sidebar-nav" className={`ws-sidebar ${open ? "is-open" : ""}`}><div className="ws-sidebar-brand"><Link href="/dashboard" className="workspace-brand"><span className="ws-brand-logo-box">{logoUrl ? <img src={logoUrl} alt={brandTitle} className="ws-logo-img" /> : <BookOpenText size={23} />}</span><div><strong>{brandTitle}</strong><small>{brandSubtitle}</small></div></Link><button className="ws-close" aria-label="بستن منو" onClick={() => setOpen(false)}><X size={20} /></button></div>
       <div className="ws-sidebar-scroll"><div className="ws-nav-label">منوی اصلی</div><nav>{links.filter((link) => link.allowed).map((link) => { const Icon = link.icon; const active = !link.href.includes("?") && pathname === link.href; return <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className={`ws-nav-link ${active ? "active" : ""}`}><Icon size={19} /><span>{link.label}</span>{link.href === "/notifications" && unread > 0 && <b className="ws-unread-count">{new Intl.NumberFormat("fa-IR").format(unread)}</b>}{active && <i />}</Link>; })}</nav>
         <div className="ws-side-note"><ShieldCheck size={19} /><strong>حریم خصوصی مهم است</strong><p>دسترسی به پرونده‌ها بر اساس نقش و محدوده کاربر کنترل می‌شود.</p></div>
       </div><div className="ws-sidebar-bottom"><span className="ws-avatar">{photoUrl ? <img src={photoUrl} alt={`تصویر پرسنلی ${name}`} width={36} height={36} /> : name.slice(0, 1)}</span><div><strong>{name}</strong><small>{customRoleLabel ? `${customRoleLabel} · ${roleLabels[role]}` : roleLabels[role]}</small></div><form action={logoutAction}><button title="خروج از حساب" aria-label="خروج از حساب"><LogOut size={18} /></button></form></div>

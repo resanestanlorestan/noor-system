@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, BookOpenText, CheckCircle2, FileCheck2, ShieldCheck, UsersRound } from "lucide-react";
 import { AuthForm } from "@/components/auth-form";
 import { getContent } from "@/lib/site-content";
+import { getSiteSettings } from "@/lib/site-settings";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type Mode = "login" | "register" | "setup";
@@ -15,16 +16,17 @@ export async function AuthShell({ mode, showSetup = false, resetDone = false }: 
   mode: Mode; showSetup?: boolean; resetDone?: boolean;
 }) {
   const c = await getContent();
+  const st = await getSiteSettings();
   const t = c.text;
   return <main className="auth-page">
-    <header className="auth-top"><Link href="/login" className="workspace-brand"><span><BookOpenText size={23} /></span><div><strong>{t("shell.brand.title")}</strong><small>{t("shell.brand.subtitle")}</small></div></Link><ThemeToggle /></header>
+    <header className="auth-top"><Link href="/login" className="workspace-brand"><span className="ws-brand-logo-box">{st.logoUrl ? <img src={st.logoUrl} alt={t("shell.brand.title")} className="ws-logo-img" /> : <BookOpenText size={23} />}</span><div><strong>{t("shell.brand.title")}</strong><small>{t("shell.brand.subtitle")}</small></div></Link><ThemeToggle /></header>
     <div className="auth-layout">
       <section className="auth-story">
         <div className="auth-story-art" /><div className="auth-story-overlay" />
         <div className="auth-story-inner"><div className="auth-story-badge"><span /> {t("auth.story.badge")}</div><h1>{t("auth.story.heading1")}<br /><em>{t("auth.story.heading2")}</em></h1><p>{t("auth.story.body")}</p><div className="auth-features"><div><span><UsersRound size={19} /></span><div><strong>{t("auth.feature1.title")}</strong><small>{t("auth.feature1.sub")}</small></div></div><div><span><FileCheck2 size={19} /></span><div><strong>{t("auth.feature2.title")}</strong><small>{t("auth.feature2.sub")}</small></div></div><div><span><ShieldCheck size={19} /></span><div><strong>{t("auth.feature3.title")}</strong><small>{t("auth.feature3.sub")}</small></div></div></div></div>
         <div className="auth-story-footer">{t("auth.story.footer")}</div>
       </section>
-      <section className="auth-card-wrap"><div className="auth-card"><div className="auth-card-top"><span className="auth-card-icon"><BookOpenText size={22} /></span></div><div className="auth-heading"><div className="ws-eyebrow"><span /> {mode === "login" ? t("auth.login.eyebrow") : mode === "register" ? t("auth.register.eyebrow") : t("auth.setup.eyebrow")}</div><h2>{mode === "login" ? t("auth.login.title") : mode === "register" ? t("auth.register.title") : t("auth.setup.title")}</h2><p>{mode === "login" ? t("auth.login.body") : mode === "register" ? t("auth.register.body") : t("auth.setup.body")}</p></div>
+      <section className="auth-card-wrap"><div className="auth-card"><div className="auth-card-top"><span className="auth-card-icon">{st.logoUrl ? <img src={st.logoUrl} alt={t("shell.brand.title")} className="auth-logo-img" /> : <BookOpenText size={22} />}</span></div><div className="auth-heading"><div className="ws-eyebrow"><span /> {mode === "login" ? t("auth.login.eyebrow") : mode === "register" ? t("auth.register.eyebrow") : t("auth.setup.eyebrow")}</div><h2>{mode === "login" ? t("auth.login.title") : mode === "register" ? t("auth.register.title") : t("auth.setup.title")}</h2><p>{mode === "login" ? t("auth.login.body") : mode === "register" ? t("auth.register.body") : t("auth.setup.body")}</p></div>
         {mode === "setup" && <div className="setup-note"><ShieldCheck size={18} /><span>کد تصادفی در فایل <b dir="ltr">.private-app/bootstrap-code</b> روی سرور ایجاد شده است. این کد را منتشر نکنید.</span></div>}
         {resetDone && mode === "login" && <div className="form-success" role="status"><CheckCircle2 size={14} /> {t("auth.reset_done")}</div>}
         <AuthForm mode={mode} />

@@ -7,14 +7,20 @@ import "@fontsource/vazirmatn/600.css";
 import "@fontsource/vazirmatn/700.css";
 import { THEME_BOOTSTRAP, THEME_KEY, themeFromCookie } from "@/lib/theme";
 import { DEFAULT_CONTENT, getContent } from "@/lib/site-content";
+import { getSiteSettings } from "@/lib/site-settings";
 import "./globals.css";
 import "./workspace.css";
 
 // الحاقیهٔ ۲.۱۸.۴ — عنوان و توضیحات سایت از CMS؛ در خطای دیتابیس به پیش‌فرض کد برمی‌گردد
 export async function generateMetadata(): Promise<Metadata> {
   try {
-    const content = await getContent();
-    return { title: content.text("site.title") || DEFAULT_CONTENT["site.title"], description: content.text("site.description") || DEFAULT_CONTENT["site.description"] };
+    const [content, settings] = await Promise.all([getContent(), getSiteSettings()]);
+    return {
+      title: content.text("site.title") || DEFAULT_CONTENT["site.title"],
+      description: content.text("site.description") || DEFAULT_CONTENT["site.description"],
+      // الحاقیهٔ ۲.۱۸.۵: آیکن مرورگر هم از لوگوی مدیریتی می‌آید
+      icons: settings.logoUrl ? { icon: settings.logoUrl } : undefined,
+    };
   } catch {
     return { title: DEFAULT_CONTENT["site.title"], description: DEFAULT_CONTENT["site.description"] };
   }

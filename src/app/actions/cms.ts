@@ -3,13 +3,15 @@
 // الحاقیهٔ ۲.۱۸.۴ — کنش‌های مدیریتی بخش «مدیریت محتوای سایت» داشبورد:
 // ذخیرهٔ گروهی متن‌ها (با ثبت نسخهٔ پیشین در تاریخچه)، بازگردانی نسخهٔ قبلی،
 // بازنشانی به متن پیش‌فرض برنامه — همه فقط با مجوز cms.manage و با ثبت ممیزی.
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, notInArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { siteContent, siteContentRevisions } from "@/db/schema";
 import { requireUser, audit } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { CONTENT_MAX_LENGTH, contentItemOf, isContentKey, siteContentGroups } from "@/lib/site-content";
+import { MAX_LOGO_BYTES, sniffLogoImage } from "@/lib/site-settings";
+import { siteSettings } from "@/db/schema";
 import type { ActionState } from "@/lib/action-state";
 
 const CMS_PAGE = "/cms";
@@ -114,3 +116,54 @@ export async function resetContentKeyAction(_state: ActionState, data: FormData)
   }
 }
 
+/** الحاقیهٔ ۲.۱۸.۵ — آپلود لوگوی جدید: اعتبارسنجی سمت سرور (حجم، فرمت واقعی از
+ * روی امضای بایت، ابعاد معقول) و ذخیرهٔ بایت‌ها در site_settings؛ URL سرو از
+ * روی updatedAt ساخته می‌شود و کش همه‌جا باطل می‌شود. */
+export async function uploadLogoAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  try {
+    const user = await requireCmsEditor();
+    const file = data.get("file");
+    if (!(file instanceof File) || file.size === 0) return { error: "فایلی انتخاب نشده است؛ یک تصویر لوگو انتخاب کنید." };
+    if (file.size > MAX_LOGO_BYTES) return { error: "حجم فایل بیش از سقف مجاز است؛ حداکثر ۱ مگابایت." };
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffLogoImage(bytes);
+    if (!sniffed) return { error: "فرمت فایل معتبر نیست؛ فقط PNG، JPG، WEBP یا SVG پذیرفته می‌شود." };
+    const name = (file.name || "logo").slice(0, 180);
+    await db.insert(siteSettings).values({
+      id: 1, logoData: bytes, logoMime: sniffed.mime, logoName: name,
+      logoWidth: sniffed.width, logoHeight: sniffed.height, logoSize: bytes.length,
+      logoUpdatedAt: new Date(), logoUpdatedBy: user.id,
+    }).onConflictDoUpdate({
+      target: siteSettings.id,
+      set: {
+        logoData: bytes, logoMime: sniffed.mime, logoName: name,
+        logoWidth: sniffed.width, logoHeight: sniffed.height, logoSize: bytes.length,
+        logoUpdatedAt: new Date(), logoUpdatedBy: user.id,
+      },
+    });
+    await audit(user.id, "cms_logo_update", "site_settings", "1", `${sniffed.mime}; ${bytes.length} بایت; ${name}`);
+    revalidatePath("/", "layout");
+    return { success: "لوگوی جدید ذخیره شد و به‌صورت خودکار در همهٔ بخش‌های سایت جایگزین شد." };
+  } catch {
+    return { error: "آپلود لوگو ممکن نشد؛ دسترسی یا فایل را بررسی کنید." };
+  }
+}
+
+/** حذف لوگوی سفارشی و بازگشت به آیکن پیش‌فرض برنامه. */
+export async function removeLogoAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  try {
+    const user = await requireCmsEditor();
+    await db.insert(siteSettings).values({ id: 1 }).onConflictDoNothing();
+    const [row] = await db.select({ hasLogo: sql<boolean>`(${siteSettings.logoData} is not null)` }).from(siteSettings).limit(1);
+    if (!row?.hasLogo) return { warning: true, success: "لوگوی سفارشی‌ای وجود ندارد؛ هم‌اکنون پیش‌فرض برنامه نمایش داده می‌شود." };
+    await db.update(siteSettings).set({
+      logoData: null, logoMime: null, logoName: null, logoWidth: null, logoHeight: null,
+      logoSize: null, logoUpdatedAt: new Date(), logoUpdatedBy: user.id,
+    }).where(eq(siteSettings.id, 1));
+    await audit(user.id, "cms_logo_remove", "site_settings", "1");
+    revalidatePath("/", "layout");
+    return { success: "لوگوی سفارشی حذف شد؛ پیش‌فرض برنامه در همه‌جا بازگشت." };
+  } catch {
+    return { error: "حذف لوگو ممکن نشد." };
+  }
+}
