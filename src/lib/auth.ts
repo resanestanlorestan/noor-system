@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { auditLogs, customRoles, loginAttempts, messageOutbox, sessions, users } from "@/db/schema";
 import { digest } from "@/lib/local-secrets";
+import { IDLE_TIMEOUT_MS, isSessionIdle } from "@/lib/session-timeout";
 import type { UserRole } from "@/lib/constants";
 
 const COOKIE = "noor_session";
@@ -50,12 +51,26 @@ export async function createSession(userId: string) {
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const result = await db.select({ user: users, customLabel: customRoles.label, customBase: customRoles.baseRole })
+  const tokenHash = digest(token);
+  const result = await db.select({ user: users, customLabel: customRoles.label, customBase: customRoles.baseRole, lastSeenAt: sessions.lastSeenAt })
     .from(sessions).innerJoin(users, eq(sessions.userId, users.id))
     .leftJoin(customRoles, eq(users.customRoleId, customRoles.id))
-    .where(and(eq(sessions.tokenHash, digest(token)), gt(sessions.expiresAt, new Date()), eq(users.active, true))).limit(1);
+    .where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, new Date()), eq(users.active, true))).limit(1);
   const row = result[0];
   if (!row?.user) return null;
+  // الحاقیهٔ ۲.۱۸.۷ — اعتبارسنجی سرسوییِ بی‌فعالیتی: نشستی که از سقف مجاز
+  // (پیش‌فرض ۱۵ دقیقه) درخواستی نداشته، همین‌جا باطل می‌شود؛ خروج خودکار فقط
+  // به تایمر مرورگر وابسته نیست و هر مسیر محافظت‌شده‌ای آن را اجرا می‌کند.
+  if (isSessionIdle(row.lastSeenAt)) {
+    await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+    await audit(row.user.id, "idle_session_invalidated", "session").catch(() => undefined);
+    return null;
+  }
+  // تمدید «آخرین فعالیت» با هر درخواست معتبر — با آستانهٔ ۳۰ ثانیه تا هر
+  // پیمایش صفحه یک UPDATE نزند؛ درخواست‌های پیاپیِ زیر ۳۰ ثانیه جزئی‌اند.
+  if (Date.now() - row.lastSeenAt.getTime() > 30_000) {
+    await db.update(sessions).set({ lastSeenAt: new Date() }).where(eq(sessions.tokenHash, tokenHash)).catch(() => undefined);
+  }
   return { ...row.user, effectiveRole: (row.customBase ?? row.user.role) as UserRole, customRoleLabel: row.customLabel ?? null };
 }
 export async function requireUser(): Promise<SessionUser> { const user = await getCurrentUser(); if (!user) redirect("/login"); return user; }
@@ -63,6 +78,37 @@ export async function endSession() {
   const jar = await cookies(); const token = jar.get(COOKIE)?.value;
   if (token && /^[a-f0-9]{64}$/.test(token)) await db.delete(sessions).where(eq(sessions.tokenHash, digest(token)));
   jar.delete(COOKIE);
+}
+// الحاقیهٔ ۲.۱۸.۷ — نبض نشست: کلاینت فقط با کلیک «ادامه فعالیت» این تابع را
+// صدا می‌زند؛ سرور همین‌جا بی‌فعالیتی را دوباره اعتبارسنجی می‌کند (اگر از سقف
+// گذشته باشد نشست باطل می‌شود) و در حالت سالم، «آخرین فعالیت» را تمدید و زمان
+// باقی‌مانده را برمی‌گرداند. هیچ تایمر پس‌زمینه‌ای این مسیر را صدا نمی‌زند تا
+// فعالیت واقعیِ کاربر تنها مبنا بماند.
+export async function pingSession(): Promise<{ ok: boolean; remainingMs: number }> {
+  const jar = await cookies(); const token = jar.get(COOKIE)?.value;
+  if (!token || !/^[a-f0-9]{64}$/.test(token)) return { ok: false, remainingMs: 0 };
+  const tokenHash = digest(token);
+  const [row] = await db.select({ lastSeenAt: sessions.lastSeenAt, expiresAt: sessions.expiresAt }).from(sessions).where(eq(sessions.tokenHash, tokenHash)).limit(1);
+  const now = new Date();
+  if (!row || row.expiresAt <= now || isSessionIdle(row.lastSeenAt, now)) {
+    if (row) await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+    return { ok: false, remainingMs: 0 };
+  }
+  await db.update(sessions).set({ lastSeenAt: now }).where(eq(sessions.tokenHash, tokenHash));
+  return { ok: true, remainingMs: Math.max(0, IDLE_TIMEOUT_MS - (now.getTime() - row.lastSeenAt.getTime())) };
+}
+// الحاقیهٔ ۲.۱۸.۷ — خروج خودکار/هشداری با ممیزی: نشست سمت سرور حذف، کوکی پاک و
+// کنش در رویدادهای حساس ثبت می‌شود (idle_logout)؛ مستقل از درخواست صفحه.
+export async function idleLogout(reason: "idle" | "manual"): Promise<{ ok: boolean }> {
+  const jar = await cookies(); const token = jar.get(COOKIE)?.value;
+  if (token && /^[a-f0-9]{64}$/.test(token)) {
+    const tokenHash = digest(token);
+    const [row] = await db.select({ userId: sessions.userId }).from(sessions).where(eq(sessions.tokenHash, tokenHash)).limit(1);
+    await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+    if (row) await audit(row.userId, reason === "idle" ? "idle_logout" : "logout", "session", undefined, reason === "idle" ? "خروج خودکار در صورت عدم فعالیت" : undefined).catch(() => undefined);
+  }
+  jar.delete(COOKIE);
+  return { ok: true };
 }
 export async function audit(actorId: string | null, action: string, targetType: string, targetId?: string, detail?: string) {
   await db.insert(auditLogs).values({ actorId, action, targetType, targetId: targetId || null, detail: detail || null });

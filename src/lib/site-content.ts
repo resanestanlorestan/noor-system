@@ -57,6 +57,7 @@ export const siteContentGroups: ContentGroup[] = [
       { key: "auth.login.eyebrow", label: "ورود — عنوان کوچک", kind: "subtitle", value: "خوش آمدید" },
       { key: "auth.login.title", label: "ورود — عنوان کارت", kind: "title", value: "ورود به سامانه" },
       { key: "auth.login.body", label: "ورود — توضیح کارت", kind: "text", value: "برای ورود، اطلاعات حساب کاربری خود را وارد کنید." },
+      { key: "auth.login.idle_notice", label: "ورود — اعلان خروج خودکار بی‌فعالیتی", kind: "multiline", value: "به دلیل عدم فعالیت طولانی، به‌صورت خودکار از حساب خود خارج شدید؛ برای ادامه لطفاً دوباره وارد شوید." },
       { key: "auth.register.eyebrow", label: "ثبت‌نام — عنوان کوچک", kind: "subtitle", value: "همراه ما شوید" },
       { key: "auth.register.title", label: "ثبت‌نام — عنوان کارت", kind: "title", value: "ایجاد حساب کاربری" },
       { key: "auth.register.body", label: "ثبت‌نام — توضیح کارت", kind: "multiline", value: "فقط اطلاعات ضروری حساب: نام، نام خانوادگی، شماره موبایل و گذرواژه. پس از ایجاد حساب و ورود، پرونده الکترونیکی خود را در بخش «پرونده‌ها» مرحله‌به‌مرحله تکمیل و مدارک را بارگذاری می‌کنید." },

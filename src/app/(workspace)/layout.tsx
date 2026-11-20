@@ -1,4 +1,5 @@
 import { and, count, eq, isNull } from "drizzle-orm";
+import { IdleTimeout } from "@/components/idle-timeout";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { db } from "@/db";
 import { activists, notifications } from "@/db/schema";
@@ -7,6 +8,7 @@ import { faDate } from "@/lib/format";
 import { effectivePermissions } from "@/lib/permissions";
 import { getContent } from "@/lib/site-content";
 import { getSiteSettings } from "@/lib/site-settings";
+import { IDLE_TIMEOUT_MS, IDLE_WARNING_MS } from "@/lib/session-timeout";
 export const dynamic = "force-dynamic";
 export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -21,5 +23,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
     getSiteSettings(),
   ]);
   const photoDocumentId = photoRows[0]?.photoDocumentId ?? null;
-  return <WorkspaceShell name={user.fullName} role={user.effectiveRole} customRoleLabel={user.customRoleLabel} permissions={[...grants]} today={faDate(new Date())} unread={unreadRows[0]?.total ?? 0} photoUrl={photoDocumentId ? `/api/documents/${photoDocumentId}` : null} brandTitle={content.text("shell.brand.title")} brandSubtitle={content.text("shell.brand.subtitle")} topbarTitle={content.text("shell.topbar.title")} searchPlaceholder={content.text("shell.search.placeholder")} logoUrl={settings.logoUrl}>{children}</WorkspaceShell>;
+  // الحاقیهٔ ۲.۱۸.۷ — خروج خودکار در صورت عدم فعالیت روی همهٔ بخش‌های نیازمند ورود؛
+  // سقف‌ها از lib/session-timeout می‌آیند تا در آینده از تنظیمات داشبورد قابل تغییر باشند
+  return <><WorkspaceShell name={user.fullName} role={user.effectiveRole} customRoleLabel={user.customRoleLabel} permissions={[...grants]} today={faDate(new Date())} unread={unreadRows[0]?.total ?? 0} photoUrl={photoDocumentId ? `/api/documents/${photoDocumentId}` : null} brandTitle={content.text("shell.brand.title")} brandSubtitle={content.text("shell.brand.subtitle")} topbarTitle={content.text("shell.topbar.title")} searchPlaceholder={content.text("shell.search.placeholder")} logoUrl={settings.logoUrl}>{children}</WorkspaceShell><IdleTimeout idleMs={IDLE_TIMEOUT_MS} warnMs={IDLE_WARNING_MS} /></>;
 }

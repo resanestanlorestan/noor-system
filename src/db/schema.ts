@@ -101,6 +101,8 @@ export const sessions = pgTable("user_sessions", {
   userId: uuid("user_id").notNull().references(() => users.id),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // الحاقیهٔ ۲.۱۸.۷ — آخرین فعالیت نشست؛ مبنا بطلان خودکار بی‌فعالیتی در سمت سرور
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("sessions_user_idx").on(table.userId)]);
 export const loginAttempts = pgTable("login_attempts", {
   identityHash: varchar("identity_hash", { length: 64 }).primaryKey(),
