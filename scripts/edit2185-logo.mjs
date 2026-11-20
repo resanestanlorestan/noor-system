@@ -2,8 +2,8 @@ import ZAI from '/home/z/.bun/install/global/node_modules/z-ai-web-dev-sdk/dist/
 import fs from 'fs';
 
 const SRC = '/tmp/src-shot.jpg';
-const OUT = '/home/z/my-project/download/screenshot-logo-text-removed-v3.png';
-const PROMPT = `Remove the Persian word نور inside the small rounded-square logo box in the middle of the page, leaving that box completely empty with clean white background. CRITICAL: the very first top row of the output MUST be the phone status bar (dark icons: signal bars, LTE, battery, settings gear, the time ۲۳:۱۹ on the right) exactly as in the source, followed by the Chrome URL bar row. Do not crop or drop any row of the screenshot. Keep all other Persian and English text, header, cards, buttons, icons, colors and borders pixel-identical. Only erase the word نور from inside that rounded box.`;
+const OUT = '/home/z/my-project/download/screenshot-no-label.png';
+const PROMPT = `This is a mobile screenshot of a Persian web app page. Remove ONLY the small text line reading «بدون یک خط کدنویس» together with its small golden bullet dot — that short line sits between the breadcrumb row "صفحه اصلی / لوگوی سایت" and the large green heading "لوگوی سایت". After removal, the breadcrumb row should be directly followed by the large heading. Keep absolutely everything else pixel-identical to the source: the phone status bar row, the Chrome URL bar, the site header with menu button, the search row, the breadcrumb, the heading itself, the description paragraph, both cards, all buttons, icons, colors, borders and fonts. Do not crop anything and do not change any other text.`;
 
 const b64 = fs.readFileSync(SRC).toString('base64');
 const zai = await ZAI.create();
