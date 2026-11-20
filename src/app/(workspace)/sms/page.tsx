@@ -14,6 +14,7 @@ import { SmsSettingsForm, SmsTemplateEditor, SmsTestForm } from "@/components/sm
 import { FlashNotice } from "@/components/flash-notice";
 import { popFlash } from "@/lib/flash";
 import { faDate, faNumber } from "@/lib/format";
+import { getContent } from "@/lib/site-content";
 
 const statusClass = { queued: "status-pending", sent: "status-approved", failed: "status-rejected", local: "status-draft" } as const;
 const tabs = [
@@ -24,6 +25,7 @@ const tabs = [
 const tabKeys = tabs.map((tab) => tab.key);
 
 export default async function SmsManagementPage({ searchParams }: { searchParams: Promise<{ tab?: string; m?: string; status?: string; category?: string; phone?: string; page?: string }> }) {
+  const content = await getContent();
   const user = await requireUser();
   if (!(await can(user, "sms.manage"))) redirect("/dashboard");
   const query = await searchParams;
@@ -46,7 +48,7 @@ export default async function SmsManagementPage({ searchParams }: { searchParams
 
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span> <b>مدیریت پیامک‌ها</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پیام‌های سامانه</div><h1>مدیریت پیامک‌ها</h1><p>متن‌ها، قالب‌ها، تنظیمات ارسال و تاریخچهٔ همهٔ پیامک‌های سامانه — بدون تغییر کد</p></div></div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پیام‌های سامانه</div><h1>{content.text("pages.sms.title")}</h1><p>{content.text("pages.sms.sub")}</p></div></div>
     {flash && <FlashNotice message={flash} />}
     <section className="ws-panel sms-status-panel">
       <div className="ws-panel-head"><div><span>وضعیت فعلی ارسال</span><h2>{source ? `ارسال واقعی فعال است: ${sourceText}` : "حالت محلی — پنل پیامکی متصل نیست"}</h2><p>{faNumber(totals.total)} پیامک ثبت‌شده · {faNumber(totals.sent)} موفق · {faNumber(totals.failed)} ناموفق · {faNumber(totals.queued)} در صف · {faNumber(totals.local)} محلی</p></div><span className="panel-outline-icon"><MessageSquareText size={18} /></span></div>

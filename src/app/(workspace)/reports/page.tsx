@@ -7,6 +7,7 @@ import { filterQuery, getReportData, parseReportFilters, type ReportInput } from
 import { faDate, faNumber } from "@/lib/format";
 import { roleLabels, sourceLabels, statusLabels } from "@/lib/constants";
 import { ReportFiltersForm } from "@/components/report-filters";
+import { getContent } from "@/lib/site-content";
 
 function Bars({ rows, empty }: { rows:{name:string; total:number}[]; empty:string }) {
   const maximum = Math.max(...rows.map((item)=>item.total), 1);
@@ -14,6 +15,7 @@ function Bars({ rows, empty }: { rows:{name:string; total:number}[]; empty:strin
   return <div className="report-bars">{rows.map((row,index)=><div key={`${row.name}-${index}`}><div><span>{row.name}</span><strong>{faNumber(row.total)}</strong></div><i><b style={{width:`${Math.max(2,(row.total/maximum)*100)}%`}} /></i></div>)}</div>;
 }
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<ReportInput> }) {
+  const content = await getContent();
   const user = await requireUser(); if (!(await can(user, "reports.view"))) redirect("/dashboard"); await ensureReferenceData();
   const input = await searchParams; const parsed = parseReportFilters(input);
   const data = await getReportData(user, parsed.error ? {} : parsed.filters);
@@ -26,7 +28,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     {label:"نیازمند اصلاح",value:status("needs_correction"),icon:FileWarning,color:"gold"}, {label:"ردشده",value:status("rejected"),icon:FileWarning,color:"lavender"},
     {label:"کارشناسان فعال",value:data.activeExperts,icon:UsersRound,color:"mint"}, {label:"پرونده معوق",value:data.overdue,icon:Clock3,color:"blue"},
   ];
-  return <><div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>گزارش‌ها و آمار</b></div><div className="ws-page-head"><div><div className="ws-eyebrow"><span /> داده‌های مدیریتی</div><h1>گزارش‌ها و آمار</h1><p>نمای تحلیلی پرونده‌ها در محدوده دسترسی شما</p></div>{!parsed.error && <div className="head-actions"><a className="secondary-button" href={`/api/reports/export?format=pdf${suffix}`}><ArrowDownToLine size={16} /> خروجی PDF</a><a className="primary-button" href={`/api/reports/export?format=xlsx${suffix}`}><ArrowDownToLine size={16} /> خروجی Excel</a></div>}</div>
+  return <><div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>گزارش‌ها و آمار</b></div><div className="ws-page-head"><div><div className="ws-eyebrow"><span /> داده‌های مدیریتی</div><h1>{content.text("pages.reports.title")}</h1><p>{content.text("pages.reports.sub")}</p></div>{!parsed.error && <div className="head-actions"><a className="secondary-button" href={`/api/reports/export?format=pdf${suffix}`}><ArrowDownToLine size={16} /> خروجی PDF</a><a className="primary-button" href={`/api/reports/export?format=xlsx${suffix}`}><ArrowDownToLine size={16} /> خروجی Excel</a></div>}</div>
   <section className="ws-panel report-filter-panel"><div className="ws-panel-head"><div><span>گزارش اختصاصی</span><h2>فیلتر گزارش</h2><p>آمار و خروجی‌ها با فیلترهای انتخاب‌شده محاسبه می‌شوند.</p></div><span className="panel-outline-icon"><Activity size={18} /></span></div><ReportFiltersForm provinces={provinces} counties={counties} specialties={data.allSpecialties} filters={parsed.filters} />{parsed.error && <div className="form-error report-filter-error" role="alert">{parsed.error}</div>}</section>
   {!parsed.error && <><div className="report-meta"><span>تاریخ تولید: {faDate(new Date(),true)}</span><span>{data.selectedLabels.length ? data.selectedLabels.join(" · ") : "بدون فیلتر افزوده؛ محدود به سطح دسترسی"}</span></div><div className="report-stats">{summary.map(({label,value,icon:Icon,color})=><div className="ws-stat" key={label}><span className={`ws-stat-icon ${color}`}><Icon size={20} /></span><div><small>{label}</small><strong>{faNumber(value)}</strong></div></div>)}</div>
   <section className="ws-panel report-progress"><div><strong>پیشرفت بررسی نهایی</strong><p>نسبت پرونده‌های تأیید یا ردشده به پرونده‌های ارسال‌شده</p></div><span>{faNumber(data.completionRate)}٪</span><div className="report-progress-track"><i style={{width:`${data.completionRate}%`}} /></div></section>

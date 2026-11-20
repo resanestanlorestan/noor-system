@@ -11,10 +11,12 @@ import { smsProviderLabel } from "@/lib/messaging";
 import { DEFAULT_THRESHOLD_DAYS, THRESHOLD_OPTIONS, listOverdueCases, listRecentReminders, maskPhone, parseThreshold } from "@/lib/reminders";
 import { sendRemindersAction } from "@/app/actions/reminders";
 import { ConfirmButton } from "@/components/case-controls";
+import { getContent } from "@/lib/site-content";
 
 const thresholdLabels: Record<number, string> = { 7: "۷ روز", 14: "۱۴ روز", 30: "۳۰ روز" };
 
 export default async function RemindersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const content = await getContent();
   const actor = await requireUser();
   if (!(await can(actor, "reminders.send"))) redirect("/dashboard");
   const query = await searchParams;
@@ -36,7 +38,7 @@ export default async function RemindersPage({ searchParams }: { searchParams: Pr
     : item.activistPhone;
 
   return <><div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>یادآور معوق‌ها</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پیگیری خودکار</div><h1>یادآور پیامکی پرونده‌های معوق</h1><p>پرونده‌هایی که بیش از حد تعیین‌شده بدون به‌روزرسانی در کارتابل بررسی مانده‌اند</p></div></div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پیگیری خودکار</div><h1>{content.text("pages.reminders.title")}</h1><p>{content.text("pages.reminders.sub")}</p></div></div>
 
     {banner && <div className="ws-notice"><BellRing size={18} /> {banner.sent ? <strong>{faNumber(banner.sent)} یادآور ارسال شد</strong> : <strong>یادآوری ارسال نشد</strong>}{banner.sent ? <> — {banner.sms ? `${faNumber(banner.sms)} پیامک در صف ارسال` : ""}{banner.local ? `${banner.sms ? " و " : ""}${faNumber(banner.local)} پیامک در حالت محلی ثبت شد` : ""}</> : banner.skipped ? ` — ${faNumber(banner.skipped)} مورد در بازه یادآوری قبلی بود` : " — موردی واجد شرایط نبود."}</div>}
 

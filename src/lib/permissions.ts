@@ -52,6 +52,7 @@ export const permissionCatalogue: PermissionDef[] = [
   { key: "reminders.send", label: "ارسال یادآور پیامکی پرونده‌های معوق", category: "گزارش و نظارت", hint: "ارسال یادآور به مسئول هر پرونده معوق؛ در صفحات «یادآور معوق‌ها» و کرون روزانه" },
   { key: "audit.view", label: "مشاهده رویدادهای حساس", category: "گزارش و نظارت" },
   { key: "outbox.view", label: "مشاهده صندوق پیام‌ها", category: "گزارش و نظارت" },
+  { key: "cms.manage", label: "مدیریت محتوای سایت", category: "تنظیمات پایه", hint: "ویرایش عنوان‌ها، متن‌ها و پیام‌های نمایشی صفحات سایت از داشبورد؛ پیش‌نمایش و بازگردانی نسخهٔ پیشین" },
   { key: "permissions.manage", label: "مدیریت نقش‌ها و مجوزها", category: "دسترسی‌ها", hint: "تغییر ماتریس مجوزها و تعریف نقش سفارشی" },
 ];
 

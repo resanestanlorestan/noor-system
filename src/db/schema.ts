@@ -712,3 +712,26 @@ export const apiSettings = pgTable("api_settings", {
   updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** الحاقیهٔ ۲.۱۸.۴ — مدیریت محتوای سایت: مقدار جاری هر کلید محتوا. تا پیش از
+ * نخستین ویرایشِ مدیر، جدول خالی است و مقدار پیش‌فرضِ رجیستری کد سرو می‌شود؛
+ * پس از ویرایش، مقدار دیتابیس در همهٔ صفحات بر پیش‌فرض مقدم می‌شود. */
+export const siteContent = pgTable("site_content", {
+  key: varchar("key", { length: 120 }).primaryKey(),
+  page: varchar("page", { length: 60 }).notNull(),
+  section: varchar("section", { length: 80 }).notNull(),
+  label: varchar("label", { length: 120 }).notNull(),
+  value: text("value").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+/** تاریخچهٔ نسخه‌های پیشین هر کلید محتوا برای بازگردانی؛ هنگام هر ذخیره،
+ * مقدار قبلی به‌عنوان یک نسخه ثبت می‌شود و سقف نگهداری ۱۵ نسخه است. */
+export const siteContentRevisions = pgTable("site_content_revisions", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 120 }).notNull().references(() => siteContent.key, { onDelete: "cascade" }),
+  value: text("value").notNull(),
+  changedBy: uuid("changed_by").references(() => users.id, { onDelete: "set null" }),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("site_content_revisions_key_idx").on(table.key, table.changedAt)]);

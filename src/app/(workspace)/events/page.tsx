@@ -21,6 +21,7 @@ import {
 } from "@/app/actions/events";
 import { ActionForm, EventCreateForm, InviteHint, tehranLocalInput } from "@/components/event-forms";
 import { ConfirmButton } from "@/components/case-controls";
+import { getContent } from "@/lib/site-content";
 
 const kindBadge: Record<string, string> = { meeting: "status-draft", workshop: "status-completing", competition: "status-pending", ceremony: "status-approved", course: "status-specialist" };
 
@@ -41,6 +42,7 @@ function eventDayKeys(rows: EventRow[]): Set<string> {
 }
 
 export default async function EventsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const content = await getContent();
   const actor = await requireUser();
   if (!(await can(actor, "events.manage"))) redirect("/dashboard");
   const query = await searchParams;
@@ -80,7 +82,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>رویدادها</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> تقویم و اطلاع‌رسانی</div><h1>رویدادهای قرآنی</h1><p>ثبت رویدادهای کشوری، استانی و شهرستانی، دعوت فعالان و یادآور پیامکی پیش از برگزاری</p></div></div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> تقویم و اطلاع‌رسانی</div><h1>{content.text("pages.events.title")}</h1><p>{content.text("pages.events.sub")}</p></div></div>
 
     {banner?.kind === "created" && <div className="ws-notice"><CalendarPlus size={18} /> <strong>رویداد ثبت شد.</strong> حالا فعالان محدوده خود را دعوت کنید.</div>}
     {banner?.kind === "reminded" && <div className="ws-notice"><Megaphone size={18} /> {banner.sent ? <strong>{faNumber(banner.sent)} یادآور ارسال شد</strong> : <strong>یادآور تازه‌ای ارسال نشد</strong>}{banner.sent ? <> — {banner.sms ? `${faNumber(banner.sms)} پیامک در صف ارسال` : ""}{banner.local ? `${banner.sms ? " و " : ""}${faNumber(banner.local)} پیامک در حالت محلی ثبت شد` : ""}{banner.noPhone ? ` · ${faNumber(banner.noPhone)} دعوت‌شده بدون شماره` : ""}</> : " — همه دعوت‌شدگان قبلاً یادآوری شده‌اند یا رویداد در بازه یادآور نیست."}</div>}

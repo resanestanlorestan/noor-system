@@ -6,13 +6,19 @@ import "@fontsource/vazirmatn/500.css";
 import "@fontsource/vazirmatn/600.css";
 import "@fontsource/vazirmatn/700.css";
 import { THEME_BOOTSTRAP, THEME_KEY, themeFromCookie } from "@/lib/theme";
+import { DEFAULT_CONTENT, getContent } from "@/lib/site-content";
 import "./globals.css";
 import "./workspace.css";
 
-export const metadata: Metadata = {
-  title: "نور | سامانه جامع فعالان قرآنی",
-  description: "سامانه ثبت و بررسی پرونده فعالان قرآنی",
-};
+// الحاقیهٔ ۲.۱۸.۴ — عنوان و توضیحات سایت از CMS؛ در خطای دیتابیس به پیش‌فرض کد برمی‌گردد
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const content = await getContent();
+    return { title: content.text("site.title") || DEFAULT_CONTENT["site.title"], description: content.text("site.description") || DEFAULT_CONTENT["site.description"] };
+  } catch {
+    return { title: DEFAULT_CONTENT["site.title"], description: DEFAULT_CONTENT["site.description"] };
+  }
+}
 
 export const viewport: Viewport = {
   themeColor: "#f5f8f5",

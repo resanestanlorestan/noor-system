@@ -14,6 +14,7 @@ import { AddRecipientForm, AutoSettingsForm, DeleteRecipient, EditRecipient, Man
 import { FlashNotice } from "@/components/flash-notice";
 import { popFlash } from "@/lib/flash";
 import { faDate, faNumber } from "@/lib/format";
+import { getContent } from "@/lib/site-content";
 
 // الحاقیهٔ ۲.۱۶.۰ — داشبورد «اطلاع‌رسانی پیامکی مدیران»: فهرست مدیران
 // (همگام‌شده از سامانهٔ کاربران + دستی)، کلید ارسال خودکار هنگام ثبت پرونده،
@@ -22,6 +23,7 @@ const statusClass = { queued: "status-pending", sent: "status-approved", failed:
 const statusLabel = { queued: "در صف", sent: "موفق", failed: "ناموفق", local: "محلی" } as const;
 
 export default async function ManagerSmsPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
+  const content = await getContent();
   const user = await requireUser();
   if (!(await can(user, "sms.manage"))) redirect("/dashboard");
   // همگام‌سازی خودکار و ایدم‌پوتنت با هر باز شدن صفحه؛ مدیر تازهٔ سامانهٔ
@@ -50,7 +52,7 @@ export default async function ManagerSmsPage({ searchParams }: { searchParams: P
 
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span> <b>اطلاع‌رسانی پیامکی مدیران</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> اطلاع‌رسانی خودکار</div><h1>اطلاع‌رسانی پیامکی مدیران</h1><p>هنگام ثبت هر پروندهٔ جدید، برای مدیران فعال پیامک خودکار ارسال می‌شود؛ فهرست مدیران از سامانهٔ کاربران همگام می‌ماند.</p></div></div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> اطلاع‌رسانی خودکار</div><h1>{content.text("pages.manager_sms.title")}</h1><p>{content.text("pages.manager_sms.sub")}</p></div></div>
     {flash && <FlashNotice message={flash} />}
 
     <section className="ws-panel sms-status-panel">

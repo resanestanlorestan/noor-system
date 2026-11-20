@@ -15,8 +15,10 @@ import { CaseTable } from "@/components/case-table";
 import { FlashNotice } from "@/components/flash-notice";
 import { popFlash } from "@/lib/flash";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
+import { getContent } from "@/lib/site-content";
 
 export default async function CasesPage({ searchParams }: { searchParams: Promise<CaseSearchInput & { page?: string; m?: string }> }) {
+  const content = await getContent();
   const user = await requireUser(); const params = await searchParams; await ensureReferenceData();
   // الحاقیهٔ ۲.۱۰.۳ — پیام نتیجهٔ اکشن‌ها با توکن فلش یک‌بارمصرف می‌آید، نه در URL.
   const flash = popFlash(params.m);
@@ -47,7 +49,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
   }
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span> <b>{user.effectiveRole === "activist" ? "پرونده من" : "بانک پرونده‌ها"}</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پرونده‌های الکترونیکی</div><h1>{user.effectiveRole === "activist" ? "پرونده من" : "بانک پرونده‌ها"}</h1><p>مشاهده و پیگیری پرونده‌ها در محدوده دسترسی شما</p></div>{(await can(user, "cases.create")) && !(user.effectiveRole === "activist" && rows.length) && <div className="head-actions"><Link className="primary-button" href="/cases/new"><FilePlus2 size={17} /> ثبت پرونده جدید</Link>{user.effectiveRole === "activist" && <Link className="secondary-button" href="/cases/claim">اتصال پرونده ثبت‌شده</Link>}</div>}</div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پرونده‌های الکترونیکی</div><h1>{user.effectiveRole === "activist" ? "پرونده من" : "بانک پرونده‌ها"}</h1><p>{content.text("pages.cases.sub")}</p></div>{(await can(user, "cases.create")) && !(user.effectiveRole === "activist" && rows.length) && <div className="head-actions"><Link className="primary-button" href="/cases/new"><FilePlus2 size={17} /> ثبت پرونده جدید</Link>{user.effectiveRole === "activist" && <Link className="secondary-button" href="/cases/claim">اتصال پرونده ثبت‌شده</Link>}</div>}</div>
     {flash && <FlashNotice message={flash} />}
     {activistStrip}
     <section className="ws-panel ws-list-panel">

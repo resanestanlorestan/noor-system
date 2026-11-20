@@ -19,8 +19,10 @@ import { maskPhone } from "@/lib/reminders";
 import { sendBroadcastAction } from "@/app/actions/broadcasts";
 import { BroadcastFiltersForm } from "@/components/broadcast-filters";
 import { ConfirmButton } from "@/components/case-controls";
+import { getContent } from "@/lib/site-content";
 
 export default async function BroadcastsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const content = await getContent();
   const actor = await requireUser();
   if (!(await can(actor, "messages.broadcast"))) redirect("/dashboard");
   await ensureReferenceData();
@@ -54,7 +56,7 @@ export default async function BroadcastsPage({ searchParams }: { searchParams: P
   const workflowStatuses = Object.entries(statusLabels).filter(([key]) => !["draft", "filling", "needs_correction"].includes(key));
 
   return <><div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>پیام گروهی</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> اطلاع‌رسانی دسته‌جمعی</div><h1>ارسال پیام گروهی به فعالان</h1><p>پیامک و اعلان هم‌زمان برای فعالان محدوده مدیریتی شما، بر اساس فیلتر جغرافیا، تخصص و وضعیت پرونده</p></div></div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> اطلاع‌رسانی دسته‌جمعی</div><h1>{content.text("pages.broadcasts.title")}</h1><p>{content.text("pages.broadcasts.sub")}</p></div></div>
 
     {banner && <div className="ws-notice"><Megaphone size={18} /> <strong>{faNumber(banner.sent)} پیام گروهی ارسال شد</strong>{banner.sent ? <> — {banner.sms ? `${faNumber(banner.sms)} پیامک در صف ارسال` : ""}{banner.local ? `${banner.sms ? " و " : ""}${faNumber(banner.local)} پیامک در حالت محلی ثبت شد` : ""}{banner.notified ? `${banner.sms || banner.local ? " و " : ""}${faNumber(banner.notified)} اعلان درون‌برنامه‌ای` : ""}</> : ""}</div>}
     {error && <div className="form-error" role="alert">{error}</div>}

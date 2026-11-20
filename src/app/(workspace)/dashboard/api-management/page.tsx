@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { ensureApiSettings } from "@/lib/api-keys";
 import { webhookEvents } from "@/lib/api-outgoing";
 import { ApiManagement, type ApiKeyRow, type IntegrationRow, type LogRow, type SettingsRow, type WebhookRow } from "@/components/api-management";
+import { getContent } from "@/lib/site-content";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ async function loadApiDashboard() {
 }
 
 export default async function ApiManagementPage() {
+  const content = await getContent();
   const user = await requireUser();
   if ((user.effectiveRole ?? user.role) !== "super_admin") redirect("/dashboard");
   const { settings, keys, integrations, webhooks, logs, logs24h, errors24h } = await loadApiDashboard();
@@ -47,7 +49,7 @@ export default async function ApiManagementPage() {
   return (
     <>
       <div className="ws-breadcrumb"><Link href="/dashboard">داشبورد</Link> <span> / </span><b>مدیریت API</b></div>
-      <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> اتصال سامانه‌ها</div><h1>مدیریت API و اتصال به سامانه‌های خارجی</h1><p>کلیدهای اختصاصی، اتصال‌ها، وب‌هوک‌ها، مستندات و تاریخچهٔ کامل درخواست‌ها — همهٔ داده‌ها از همان بانک پرونده‌های سامانه خوانده و نوشته می‌شود.</p></div></div>
+      <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> اتصال سامانه‌ها</div><h1>{content.text("pages.api_management.title")}</h1><p>{content.text("pages.api_management.sub")}</p></div></div>
       <ApiManagement
         keys={keyRows} integrations={integrationRows} webhooks={webhookRows} logs={logRows}
         settings={settingsRow} events={webhookEvents.map((event) => ({ ...event }))}

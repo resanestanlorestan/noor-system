@@ -7,8 +7,10 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { faNumber } from "@/lib/format";
 import { listRanking, listSpecialtyOptions, SCORE_WEIGHTS } from "@/lib/ranking";
+import { getContent } from "@/lib/site-content";
 
 export default async function RankingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const content = await getContent();
   const actor = await requireUser();
   if (!(await can(actor, "reports.view"))) redirect("/dashboard");
   const query = await searchParams;
@@ -31,7 +33,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
 
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span><b>رتبه‌بندی فعالان</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> شفاف و مستند</div><h1>رتبه‌بندی و امتیاز فعالان قرآنی</h1><p>امتیاز هر فعال از مجموع وزن‌دار سوابق ساختاریافته پرونده او محاسبه می‌شود: فعالیت‌ها، تدریس، داوری، مسابقات، پژوهش، دوره‌ها (و ساعت آن‌ها)، گواهینامه‌ها و حضور در رویدادها</p></div></div>
+    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> شفاف و مستند</div><h1>{content.text("pages.ranking.title")}</h1><p>{content.text("pages.ranking.sub")}</p></div></div>
 
     <section className="ws-panel"><div className="ws-panel-head"><div><span>وزن‌های امتیازدهی</span><h2>فرمول امتیاز</h2><p>فعالیت {faNumber(SCORE_WEIGHTS.activity)} · تدریس {faNumber(SCORE_WEIGHTS.teaching)} · داوری {faNumber(SCORE_WEIGHTS.judging)} · مسابقه {faNumber(SCORE_WEIGHTS.competition)} · پژوهش {faNumber(SCORE_WEIGHTS.research)} · دوره {faNumber(SCORE_WEIGHTS.course)} + هر {faNumber(SCORE_WEIGHTS.courseHoursPerPoint)} ساعت ۱ امتیاز · گواهینامه {faNumber(SCORE_WEIGHTS.certificate)} · حضور در رویداد {faNumber(SCORE_WEIGHTS.eventAttended)}</p></div><span className="panel-outline-icon"><Trophy size={18} /></span></div>
       <form method="get" action="/ranking" className="ranking-filters">
