@@ -22,7 +22,7 @@ export default async function LogoPage() {
   }
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span> <b>لوگوی سایت</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> بدون یک خط کدنویسی</div><h1>لوگوی سایت</h1><p>آپلود، پیش‌نمایش و تغییر لوگوی سایت؛ لوگوی جدید خودکار در منو، صفحات ورود و آیکن مرورگر جایگزین می‌شود.</p></div></div>
+    <div className="ws-page-head"><div><h1>لوگوی سایت</h1><p>آپلود، پیش‌نمایش و تغییر لوگوی سایت؛ لوگوی جدید خودکار در منو، صفحات ورود و آیکن مرورگر جایگزین می‌شود.</p></div></div>
     <LogoManager logoUrl={settings.logoUrl} logoMime={settings.logoMime} logoName={settings.logoName} logoSize={settings.logoSize} logoUpdatedAt={settings.logoUpdatedAt} logoWidth={settings.logoWidth} logoHeight={settings.logoHeight} updatedByName={updatedByName} />
   </>;
 }

@@ -39,3 +39,6 @@ scripts/report-*.mjs
 scripts/bundle-parts-*/
 scripts/deploy-2182/
 scripts/deploy-2183/
+
+# توکن یک‌بارمصرف گیرندهٔ آپلود دیپلوی ۲.۱۸.۶ — هرگز در مخزن نمی‌آید
+scripts/deploy-2186/.rc-token

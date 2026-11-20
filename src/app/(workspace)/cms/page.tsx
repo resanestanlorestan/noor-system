@@ -24,7 +24,7 @@ export default async function CmsPage() {
   }
   return <>
     <div className="ws-breadcrumb">صفحه اصلی <span> / </span> <b>مدیریت محتوای سایت</b></div>
-    <div className="ws-page-head"><div><div className="ws-eyebrow"><span /> بدون یک خط کدنویسی</div><h1>مدیریت محتوای سایت</h1><p>ویرایش عنوان‌ها، متن‌ها و پیام‌های نمایشی صفحات؛ با پیش‌نمایش زنده، انتشار خودکار و تاریخچهٔ بازگردانی.</p></div></div>
+    <div className="ws-page-head"><div><h1>مدیریت محتوای سایت</h1><p>ویرایش عنوان‌ها، متن‌ها و پیام‌های نمایشی صفحات؛ با پیش‌نمایش زنده، انتشار خودکار و تاریخچهٔ بازگردانی.</p></div></div>
     <CmsManager groups={siteContentGroups} values={values} history={history} />
   </>;
 }
