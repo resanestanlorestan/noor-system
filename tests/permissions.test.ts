@@ -59,9 +59,9 @@ describe("کاتالوگ مجوزها", () => {
     const pattern = /\('([a-z_]+)','([a-z_.]+)'\)/g;
     // 0004 seeds the original catalogue; 0005 (reminders.send), 0006
     // (messages.broadcast), 0007 (events.manage), 0014 (cases.expert_notes),
-    // 0018 (sms.manage) and 0025 (cms.manage) append later additions. Their
-    // union must equal the code defaults exactly.
-    for (const file of ["0004_permission-matrix.sql", "0005_overdue-reminders.sql", "0006_group-broadcasts.sql", "0007_events.sql", "0014_expert-notes.sql", "0018_sms-management.sql", "0025-site-content.sql"]) {
+    // 0018 (sms.manage), 0025 (cms.manage) and 0028 (classes.*) append later
+    // additions. Their union must equal the code defaults exactly.
+    for (const file of ["0004_permission-matrix.sql", "0005_overdue-reminders.sql", "0006_group-broadcasts.sql", "0007_events.sql", "0014_expert-notes.sql", "0018_sms-management.sql", "0025-site-content.sql", "0028-classes.sql"]) {
       const sql = readFileSync(path.join(process.cwd(), "drizzle", file), "utf8");
       let match: RegExpExecArray | null;
       while ((match = pattern.exec(sql))) seeded.add(`${match[1]}:${match[2]}`);

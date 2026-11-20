@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, FileClock, FileText, History, Image as ImageIcon, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, PenLine, PhoneCall, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, FileClock, FileText, GraduationCap, History, Image as ImageIcon, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, PenLine, PhoneCall, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { roleLabels, type UserRole } from "@/lib/constants";
@@ -34,6 +34,9 @@ export function WorkspaceShell({ name, role, customRoleLabel, permissions, today
     { href: "/cms", label: "مدیریت محتوای سایت", icon: PenLine, allowed: allowed("cms.manage") },
     { href: "/cms/logo", label: "لوگوی سایت", icon: ImageIcon, allowed: allowed("cms.manage") },
     { href: "/events", label: "رویدادها", icon: CalendarDays, allowed: allowed("events.manage") },
+    { href: "/classes", label: "کلاس‌ها و دوره‌ها", icon: GraduationCap, allowed: allowed("classes.manage") },
+    { href: "/teaching", label: "کلاس‌های تدریسی من", icon: GraduationCap, allowed: allowed("classes.teach") && !allowed("classes.manage") },
+    { href: "/my-classes", label: "کلاس‌های من", icon: GraduationCap, allowed: true },
     { href: "/users", label: "مدیریت کاربران", icon: UsersRound, allowed: allowed("users.manage") },
     { href: "/permissions", label: "نقش‌ها و مجوزها", icon: ShieldCheck, allowed: allowed("permissions.manage") },
     { href: "/settings", label: "تقسیمات جغرافیایی", icon: MapPinned, allowed: allowed("settings.geo") || allowed("settings.references") },

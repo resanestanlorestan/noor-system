@@ -5,10 +5,10 @@
 // متنِ هر قالب از دیتابیس (sms_templates، در lib/sms-admin.ts) یا پیش‌فرض
 // همین‌جا خوانده می‌شود و از داشبورد مدیریت پیامک‌ها بدون تغییر کد ویرایش می‌شود.
 
-export type SmsCategory = "auth" | "case" | "reminder" | "event" | "broadcast" | "test" | "system";
+export type SmsCategory = "auth" | "case" | "reminder" | "event" | "class" | "broadcast" | "test" | "system";
 
 export const smsCategoryLabels: Record<SmsCategory, string> = {
-  auth: "احراز هویت", case: "پرونده‌ها", reminder: "یادآورها", event: "رویدادها",
+  auth: "احراز هویت", case: "پرونده‌ها", reminder: "یادآورها", event: "رویدادها", class: "کلاس‌ها",
   broadcast: "پیام گروهی", test: "آزمایشی", system: "سیستمی",
 };
 
@@ -137,6 +137,64 @@ export const SMS_TEMPLATE_DEFS: SmsTemplateDef[] = [
       { token: "place", label: "مکان", sample: "در سالن اجلاس استان" },
     ],
     defaultBody: "سامانه نور: رویداد «{{title}}» در تاریخ {{date}} برگزار می‌شود{{place}}. لطفاً حضور خود را در سامانه تأیید کنید.",
+  },
+  {
+    key: "class_invite",
+    category: "class",
+    label: "کلاس‌ها — دعوت به ثبت‌نام",
+    hint: "پس از فعال‌سازی کلاس برای افراد واجد شرایطِ گروه هدف و شهرستان‌های انتخاب‌شده (فقط یک‌بار برای هر فرد).",
+    variables: [
+      { token: "topic", label: "موضوع کلاس", sample: "اصول تدریس جزء‌خوانی" },
+      { token: "groups", label: "گروه‌های هدف", sample: "حافظ، معلم" },
+      { token: "counties", label: "شهرستان‌ها", sample: "تهران، اسلامشهر" },
+      { token: "app", label: "نام سامانه", sample: "سامانه نور" },
+    ],
+    defaultBody: "کاربر گرامی، دورهٔ آموزشی «{{topic}}» ویژهٔ گروه {{groups}} در شهرستان {{counties}} برگزار می‌شود. جهت مشاهدهٔ جزئیات و ثبت‌نام به {{app}} مراجعه کنید.",
+  },
+  {
+    key: "class_reminder",
+    category: "class",
+    label: "کلاس‌ها — یادآور پیش از برگزاری",
+    hint: "برای ثبت‌نام‌کنندگان فعال، به فاصلهٔ تعیین‌شدهٔ هر کلاس پیش از نخستین جلسه (کرون یا دکمهٔ ادمین).",
+    variables: [
+      { token: "topic", label: "موضوع کلاس", sample: "اصول تدریس جزء‌خوانی" },
+      { token: "date", label: "زمان برگزاری", sample: "۱۴۰۵/۰۹/۱۲ ساعت ۰۸:۰۰" },
+      { token: "place", label: "مکان", sample: "در محل «سالن فرهنگ قرآنی»" },
+    ],
+    defaultBody: "سامانه نور: یادآور برگزاری کلاس «{{topic}}» در تاریخ {{date}}{{place}}. ثبت‌نام شما فعال است؛ منتظر حضور گرم شما هستیم.",
+  },
+  {
+    key: "class_change",
+    category: "class",
+    label: "کلاس‌ها — اطلاع‌رسانی تغییر",
+    hint: "در صورت تغییر زمان، مکان یا سایر جزئیات کلاس، برای ثبت‌نام‌کنندگان فعال ارسال می‌شود.",
+    variables: [
+      { token: "topic", label: "موضوع کلاس", sample: "اصول تدریس جزء‌خوانی" },
+      { token: "change", label: "شرح تغییر", sample: "محل برگزاری به سالن شماره ۲ تغییر کرد" },
+    ],
+    defaultBody: "سامانه نور: در کلاس «{{topic}}» تغییر ایجاد شد؛ {{change}}. جزئیات کامل در سامانه قابل مشاهده است.",
+  },
+  {
+    key: "class_cancel",
+    category: "class",
+    label: "کلاس‌ها — اطلاع‌رسانی لغو کلاس",
+    hint: "پس از لغو کلاس برای ثبت‌نام‌کنندگان فعال ارسال می‌شود.",
+    variables: [
+      { token: "topic", label: "موضوع کلاس", sample: "اصول تدریس جزء‌خوانی" },
+      { token: "reason", label: "دلیل لغو", sample: "به دلیل شرایط جوی" },
+    ],
+    defaultBody: "سامانه نور: کلاس «{{topic}}» {{reason}}لغو شد. ثبت‌نام شما بلامانع باقی می‌ماند و در صورت برگزاری دورهٔ جایگزین اطلاع‌رسانی می‌شود.",
+  },
+  {
+    key: "class_waitlist_invite",
+    category: "class",
+    label: "کلاس‌ها — دعوت از لیست انتظار",
+    hint: "با آزاد شدن ظرفیت برای نفر اول لیست انتظار، تا پایان مهلت پاسخ‌گویی.",
+    variables: [
+      { token: "topic", label: "موضوع کلاس", sample: "اصول تدریس جزء‌خوانی" },
+      { token: "deadline", label: "مهلت پاسخ", sample: "۱۴۰۵/۰۹/۰۵ ساعت ۱۸:۰۰" },
+    ],
+    defaultBody: "سامانه نور: یک ظرفیت در کلاس «{{topic}}» آزاد شد و نوبت شما رسید. تا {{deadline}} از پنل کاربری خود ثبت‌نام را نهایی کنید؛ پس از مهلت، نوبت به نفر بعدی منتقل می‌شود.",
   },
 ];
 

@@ -755,3 +755,135 @@ export const siteSettings = pgTable("site_settings", {
   logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
   logoUpdatedBy: uuid("logo_updated_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+// --- الحاقیهٔ ۲.۱۹.۰ — مدیریت کلاس‌ها و دوره‌های آموزشی با ثبت‌نام هوشمند ---
+export const classStatusEnumValues = ["draft", "active", "full", "cancelled", "held"] as const;
+export const classes = pgTable("classes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 160 }).notNull(),
+  topic: varchar("topic", { length: 200 }).notNull(),
+  description: text("description"),
+  syllabus: text("syllabus"),
+  status: varchar("status", { length: 12 }).$type<(typeof classStatusEnumValues)[number]>().notNull().default("draft"),
+  formatType: varchar("format_type", { length: 10 }).$type<"in_person" | "online" | "hybrid">().notNull().default("in_person"),
+  capacity: integer("capacity").notNull().default(20),
+  startsOn: date("starts_on").notNull(),
+  startTime: varchar("start_time", { length: 5 }).notNull().default("08:00"),
+  endTime: varchar("end_time", { length: 5 }).notNull().default("10:00"),
+  location: varchar("location", { length: 180 }),
+  address: text("address"),
+  teacherName: varchar("teacher_name", { length: 120 }).notNull(),
+  teacherPhone: varchar("teacher_phone", { length: 20 }),
+  teacherUserId: uuid("teacher_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  registrationDeadline: timestamp("registration_deadline", { withTimezone: true }),
+  posterData: bytea("poster_data"),
+  posterMime: varchar("poster_mime", { length: 60 }),
+  posterName: varchar("poster_name", { length: 180 }),
+  posterSize: integer("poster_size"),
+  reminderHours: integer("reminder_hours").notNull().default(48),
+  waitlistRespondHours: integer("waitlist_respond_hours").notNull().default(24),
+  createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("classes_status_idx").on(table.status), index("classes_starts_idx").on(table.startsOn)]);
+
+export const classesCounties = pgTable("classes_counties", {
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  countyId: integer("county_id").notNull().references(() => counties.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.classId, table.countyId] })]);
+
+export const classesSpecialties = pgTable("classes_specialties", {
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  specialtyId: integer("specialty_id").notNull().references(() => specialties.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.classId, table.specialtyId] })]);
+
+export const classSessions = pgTable("class_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  sessionNo: integer("session_no").notNull(),
+  startsOn: date("starts_on").notNull(),
+  startTime: varchar("start_time", { length: 5 }).notNull().default("08:00"),
+  endTime: varchar("end_time", { length: 5 }).notNull().default("10:00"),
+  location: varchar("location", { length: 180 }),
+  teacherName: varchar("teacher_name", { length: 120 }),
+  notes: text("notes"),
+}, (table) => [uniqueIndex("class_sessions_class_no_unique").on(table.classId, table.sessionNo)]);
+
+export const classRegistrations = pgTable("class_registrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references((): AnyPgColumn => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 12 }).$type<"registered" | "cancelled">().notNull().default("registered"),
+  source: varchar("source", { length: 10 }).$type<"self" | "waitlist" | "admin">().notNull().default("self"),
+  approvedBy: uuid("approved_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  decisionNote: text("decision_note"),
+  cancelReason: text("cancel_reason"),
+  registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("class_registrations_class_idx").on(table.classId),
+  index("class_registrations_user_idx").on(table.userId),
+  // ثبت‌نام تکراری فعال برای یک (کلاس، کاربر) در سطح دیتابیس ناممکن است
+  uniqueIndex("class_registrations_active_unique").on(table.classId, table.userId).where(sql`${table.status} = 'registered'`),
+]);
+
+export const classWaitlist = pgTable("class_waitlist", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references((): AnyPgColumn => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 14 }).$type<"waiting" | "invited" | "converted" | "declined" | "no_response" | "cancelled">().notNull().default("waiting"),
+  position: integer("position").notNull(),
+  invitedAt: timestamp("invited_at", { withTimezone: true }),
+  respondDeadline: timestamp("respond_deadline", { withTimezone: true }),
+  respondedAt: timestamp("responded_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("class_waitlist_class_idx").on(table.classId, table.position),
+  // هر فرد در هر لحظه فقط یک ردیف فعال (در انتظار/دعوت‌شده) در هر کلاس دارد
+  uniqueIndex("class_waitlist_active_unique").on(table.classId, table.userId).where(sql`${table.status} in ('waiting', 'invited')`),
+]);
+
+export const classAttendance = pgTable("class_attendance", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull().references((): AnyPgColumn => classSessions.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references((): AnyPgColumn => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 12 }).$type<"present" | "absent" | "late" | "excused">().notNull().default("absent"),
+  notes: text("notes"),
+  recordedBy: uuid("recorded_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("class_attendance_session_user_unique").on(table.sessionId, table.userId)]);
+
+export const classAttendanceLogs = pgTable("class_attendance_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  attendanceId: uuid("attendance_id").notNull().references((): AnyPgColumn => classAttendance.id, { onDelete: "cascade" }),
+  oldStatus: varchar("old_status", { length: 12 }),
+  newStatus: varchar("new_status", { length: 12 }).notNull(),
+  note: text("note"),
+  changedBy: uuid("changed_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const classSmsLog = pgTable("class_sms_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  classId: uuid("class_id").notNull().references((): AnyPgColumn => classes.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  kind: varchar("kind", { length: 20 }).$type<"invite" | "reminder" | "change" | "cancel" | "waitlist_invite" | "waitlist_expired" | "manual">().notNull(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  message: text("message").notNull(),
+  status: varchar("status", { length: 10 }).$type<"queued" | "sent" | "failed" | "local">().notNull().default("queued"),
+  error: text("error"),
+  outboxId: uuid("outbox_id"),
+  createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+}, (table) => [
+  index("class_sms_log_class_idx").on(table.classId, table.kind),
+  // دعوت فعال‌سازی و یادآور هر (کلاس، فرد) فقط یک‌بار؛ دعوت لیست انتظار می‌تواند
+  // پس از عدم پاسخ تکرار شود، لذا ایدمپوتنسش با گذار وضعیت تضمین می‌شود
+  uniqueIndex("class_sms_log_dedupe_idx").on(table.classId, table.userId, table.kind)
+    .where(sql`${table.kind} in ('invite', 'reminder')`),
+]);

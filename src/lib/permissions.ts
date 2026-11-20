@@ -21,7 +21,7 @@ import { db } from "@/db";
 import { customRolePermissions, rolePermissions } from "@/db/schema";
 import type { UserRole } from "@/lib/constants";
 
-export type PermissionCategory = "پرونده‌ها" | "کاربران" | "تنظیمات پایه" | "پیام‌ها" | "رویدادها" | "گزارش و نظارت" | "دسترسی‌ها";
+export type PermissionCategory = "پرونده‌ها" | "کاربران" | "تنظیمات پایه" | "پیام‌ها" | "رویدادها" | "آموزش" | "گزارش و نظارت" | "دسترسی‌ها";
 
 export type PermissionDef = { key: string; label: string; category: PermissionCategory; hint?: string };
 
@@ -48,6 +48,8 @@ export const permissionCatalogue: PermissionDef[] = [
   { key: "messages.broadcast", label: "ارسال پیام گروهی به فعالان", category: "پیام‌ها", hint: "اطلاع‌رسانی دسته‌جمعی پیامک و اعلان به فعالان محدوده مدیریتی بر اساس فیلتر جغرافیا، تخصص و وضعیت پرونده" },
   { key: "sms.manage", label: "مدیریت پیامک‌ها", category: "پیام‌ها", hint: "قالب‌های پیامک، تنظیمات پنل پیامکی، تست ارسال و تاریخچهٔ پیامک‌های سامانه" },
   { key: "events.manage", label: "مدیریت رویدادها و اطلاع‌رسانی آن‌ها", category: "رویدادها", hint: "ثبت رویدادهای کشوری/استانی/شهرستانی، دعوت فعالان و یادآور پیامکی پیش از رویداد" },
+  { key: "classes.manage", label: "مدیریت کلاس‌ها و دوره‌های آموزشی", category: "آموزش", hint: "تعریف کلاس با گروه هدف و شهرستان، پیامک دعوت واجد شرایطان، ظرفیت و لیست انتظار، حضور و غیاب و گزارش‌ها" },
+  { key: "classes.teach", label: "ثبت حضور و غیاب کلاس‌های تدریسی", category: "آموزش", hint: "مدرس فقط کلاس‌های اختصاص‌یافته به خودش را می‌بیند؛ بدون دسترسی به اطلاعات مدیریتی" },
   { key: "reports.view", label: "مشاهده گزارش‌ها و آمار", category: "گزارش و نظارت" },
   { key: "reminders.send", label: "ارسال یادآور پیامکی پرونده‌های معوق", category: "گزارش و نظارت", hint: "ارسال یادآور به مسئول هر پرونده معوق؛ در صفحات «یادآور معوق‌ها» و کرون روزانه" },
   { key: "audit.view", label: "مشاهده رویدادهای حساس", category: "گزارش و نظارت" },
@@ -70,13 +72,13 @@ export const roleDefaultPermissions: Record<UserRole, string[]> = {
     "cases.view_all", "cases.create", "cases.edit", "cases.submit", "cases.review", "cases.decide",
     "cases.assign_expert", "cases.refer_specialist", "cases.expert_notes", "cases.request_revision", "cases.appeal_manage",
     "cases.restore_version", "cases.export", "users.manage", "reports.view", "reminders.send",
-    "messages.broadcast", "events.manage",
+    "messages.broadcast", "events.manage", "classes.manage",
   ],
   county_admin: [
     "cases.view_all", "cases.create", "cases.edit", "cases.submit", "cases.review", "cases.decide",
     "cases.assign_expert", "cases.refer_specialist", "cases.expert_notes", "cases.request_revision", "cases.appeal_manage",
     "cases.restore_version", "cases.export", "reports.view", "reminders.send",
-    "messages.broadcast", "events.manage",
+    "messages.broadcast", "events.manage", "classes.manage",
   ],
   reviewer: [
     "cases.view_all", "cases.create", "cases.edit", "cases.submit", "cases.review",

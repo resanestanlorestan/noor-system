@@ -45,3 +45,6 @@ scripts/deploy-2186/.rc-token
 
 # توکن یک‌بارمصرف گیرندهٔ آپلود دیپلوی ۲.۱۸.۷ — هرگز در مخزن نمی‌آید
 scripts/deploy-2187/.rc-token
+
+# توکن دیپلوی ۲.۱۹.۰
+scripts/deploy-2190/.rc-token
