@@ -38,3 +38,4 @@ scripts/bisect*.mjs
 scripts/report-*.mjs
 scripts/bundle-parts-*/
 scripts/deploy-2182/
+scripts/deploy-2183/
