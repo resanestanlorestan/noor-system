@@ -15,7 +15,10 @@ import {
 } from "./helpers";
 import {
   CASE_STEPS, computeCaseSteps, firstIncompleteMessage, stepGateError,
-  loadCaseStepFacts, type CaseStepFacts, type CaseStepPlan,
+  loadCaseStepFacts, collectReadinessIssues, readinessHint, readinessFlagSections,
+  READINESS_FALLBACK_HINT, CORRECTION_REQUEST_LABEL, DOC_REQUESTS_LABEL,
+  identityMissing, locationMissing, specialtiesMissing, documentsMissing,
+  type CaseStepFacts, type CaseStepPlan,
 } from "@/lib/case-steps";
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
 import { prepareCaseAction, submitCaseAction, uploadDocumentAction, uploadPhotoAction } from "@/app/actions/cases";
@@ -125,6 +128,70 @@ describe("موتور قفل مراحل — وضعیت‌های چهارگانه"
     const plan = computeCaseSteps(facts());
     expect(stepGateError(plan, -1)).toContain("معتبر نیست");
     expect(stepGateError(plan, 5)).toContain("معتبر نیست");
+  });
+});
+
+// ---------------- الحاقیهٔ ۲.۱۹.۳ — بررسی هوشمند آمادگی ارسال ----------------
+
+describe("بررسی هوشمند آمادگی ارسال — موتور ناب", () => {
+  it("پروندهٔ خالی: چهار گروه نقص به‌ترتیب مراحل با بخش‌های درست و راهنمای هر مورد", () => {
+    const issues = collectReadinessIssues(facts());
+    expect(issues.map((issue) => issue.step)).toEqual([1, 2, 3, 4]);
+    expect(issues.map((issue) => issue.stepKey)).toEqual(["identity", "location", "specialties", "documents"]);
+    expect(issues[0].items).toHaveLength(identityMissing(person()).length);
+    expect(issues[0].items.every((item) => item.section === "identity-fields")).toBe(true);
+    expect(issues[0].items.every((item) => item.hint && item.hint !== READINESS_FALLBACK_HINT)).toBe(true);
+    expect(issues[1].items[0]).toMatchObject({ label: "استان و شهرستان سکونت", section: "residence" });
+    expect(issues[2].items[0]).toMatchObject({ label: "حداقل یک تخصص قرآنی", section: "specialty-grid" });
+    expect(issues[3].items.map((item) => item.section)).toEqual(["sec-evidence", "sec-photo"]);
+  });
+
+  it("جزئیات ناقص تخصص‌ها: برچسب پیشوندی با راهنمای اختصاصی و پرچم کارت جزئیات", () => {
+    const partial = facts({ status: "completing", person: fullPerson({ provinceId: 5, countyId: 7 }), specialtyCount: 1, specialtyDetailMissing: ["حافظ جزء ۳۰"], evidenceCount: 1, photoOk: true });
+    const issues = collectReadinessIssues(partial);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].step).toBe(3);
+    expect(issues[0].items[0].label).toBe("جزئیات تخصص‌ها: حافظ جزء ۳۰");
+    expect(issues[0].items[0].section).toBe("specialty-details");
+    expect(issues[0].items[0].hint).not.toBe(READINESS_FALLBACK_HINT);
+  });
+
+  it("پروندهٔ کامل بدون گارد باز: هیچ موردی گزارش نمی‌شود", () => {
+    const done = facts({ status: "completing", person: fullPerson({ provinceId: 5, countyId: 7 }), specialtyCount: 2, evidenceCount: 1, photoOk: true });
+    expect(collectReadinessIssues(done)).toEqual([]);
+    expect(collectReadinessIssues(done, { openCorrection: false, openDocRequests: 0 })).toEqual([]);
+  });
+
+  it("گاردهای باز: اصلاح روی مرحلهٔ ۵ و مدارک درخواستی روی مرحلهٔ ۴", () => {
+    const done = facts({ status: "needs_correction", person: fullPerson({ provinceId: 5, countyId: 7 }), specialtyCount: 2, evidenceCount: 1, photoOk: true });
+    const issues = collectReadinessIssues(done, { openCorrection: true, openDocRequests: 2 });
+    expect(issues).toHaveLength(2);
+    expect(issues[0].step).toBe(4);
+    expect(issues[0].items[issues[0].items.length - 1].label).toBe(DOC_REQUESTS_LABEL);
+    expect(issues[0].items[issues[0].items.length - 1].section).toBe("sec-evidence");
+    expect(issues[1].step).toBe(5);
+    expect(issues[1].items[0].label).toBe(CORRECTION_REQUEST_LABEL);
+  });
+
+  it("پوشش راهنما: هر برچسبی که موتور مراحل تولید می‌کند راهنمای اختصاصی دارد", () => {
+    const labels = [
+      ...identityMissing(person()),
+      ...locationMissing(person()),
+      ...specialtiesMissing(facts({ specialtyDetailMissing: ["حافظ جزء ۳۰"] })),
+      ...documentsMissing(facts()),
+      CORRECTION_REQUEST_LABEL, DOC_REQUESTS_LABEL,
+    ];
+    for (const label of labels) expect(readinessHint(label)).not.toBe(READINESS_FALLBACK_HINT);
+  });
+
+  it("پرچم بخش‌ها: از دید هر مرحلهٔ ویزارد", () => {
+    const plan = computeCaseSteps(facts());
+    expect(readinessFlagSections(plan.steps[0])).toEqual(["identity-fields"]);
+    expect(readinessFlagSections(plan.steps[1])).toEqual(["residence"]);
+    expect(readinessFlagSections(plan.steps[2])).toEqual(["specialty-grid"]);
+    expect(readinessFlagSections(plan.steps[3])).toEqual(["sec-evidence", "sec-photo"]);
+    const partial = computeCaseSteps(facts({ person: fullPerson({ provinceId: 5, countyId: 7 }), specialtyCount: 1, specialtyDetailMissing: ["حافظ جزء ۳۰"] }));
+    expect(readinessFlagSections(partial.steps[2])).toEqual(["specialty-details"]);
   });
 });
 

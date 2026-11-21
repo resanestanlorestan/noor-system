@@ -19,6 +19,11 @@ import { SectionUpload, type DocSlot } from "@/components/doc-upload";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
+// الحاقیهٔ ۲.۱۹.۳ — پس از هدایت «بررسی آمادگی ارسال» (?check=1)، بخش‌های
+// ناقص همان مرحله با کلاس section-flagged هایلایت می‌شوند تا کاربر بی‌درنگ
+// محل دقیق ایراد را ببیند (فهرست کلیدها از readinessFlagSections سرور می‌آید).
+const flagClass = (flagSections: string[] | undefined, key: string) => flagSections?.includes(key) ? " section-flagged" : "";
+
 type Province = { id: number; name: string };
 type County = { id: number; name: string; provinceId: number };
 type Specialty = { id: number; title: string; code: string };
@@ -75,7 +80,7 @@ function ChangeReasonField({ required }: { required: boolean }) {
 
 /* --------------------------- مرحلهٔ ۱ — هویتی --------------------------- */
 
-export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean }) {
+export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason, flagSections }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean; flagSections?: string[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveIdentityStepAction, initialActionState);
   const [values, setValues] = useState<IdentityValues>(() => ({
     firstName: defaults?.firstName || "", lastName: defaults?.lastName || "", fatherName: defaults?.fatherName || "", nationalId: "",
@@ -108,7 +113,7 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
     <input type="hidden" name="stagedDocs" value={JSON.stringify(educationDocsPayload)} />
     {state.error && <div className="form-error profile-error" role="alert">{state.error} {state.existingCaseId && <Link className="duplicate-link" href={`/cases/${state.existingCaseId}`}>مشاهده پرونده موجود ←</Link>}</div>}
     <DuplicateWarning state={state} onAcknowledge={acknowledge} pending={pending} />
-    <section className="form-section">
+    <section className={"form-section" + flagClass(flagSections, "identity-fields")} data-section="identity-fields">
       <div className="form-section-head"><h2>اطلاعات هویتی و تماس</h2><p>همه فیلدهای ستاره‌دار (<i className="req-mark">*</i>) اجباری هستند؛ فقط ایمیل اختیاری است. پس از ثبت موفق، مرحلهٔ بعدی خودکار باز می‌شود.</p></div>
       <div className="form-grid">
         <label>نام <i>*</i><input required {...bind("firstName")} maxLength={80} placeholder="نام" /></label>
@@ -155,7 +160,7 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
 
 /* ------------------------ مرحلهٔ ۲ — مکانی و فعالیت ------------------------ */
 
-export function LocationStepForm({ caseId, provinces, counties, activityProvinces, activityCounties, defaults, needsChangeReason }: { caseId: string; provinces: Province[]; counties: County[]; activityProvinces: Province[]; activityCounties: County[]; defaults: { provinceId: number | null; countyId: number | null; activityProvinceId: number | null; activityCountyId: number | null } & Partial<LocationValues>; needsChangeReason?: boolean }) {
+export function LocationStepForm({ caseId, provinces, counties, activityProvinces, activityCounties, defaults, needsChangeReason, flagSections }: { caseId: string; provinces: Province[]; counties: County[]; activityProvinces: Province[]; activityCounties: County[]; defaults: { provinceId: number | null; countyId: number | null; activityProvinceId: number | null; activityCountyId: number | null } & Partial<LocationValues>; needsChangeReason?: boolean; flagSections?: string[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveLocationStepAction, initialActionState);
   const [provinceId, setProvinceId] = useState(String(defaults.provinceId || ""));
   const [countyId, setCountyId] = useState(String(defaults.countyId || ""));
@@ -170,6 +175,7 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
     {state.error && <div className="form-error profile-error" role="alert">{state.error}</div>}
     <section className="form-section">
       <div className="form-section-head"><h2>سکونت و محل فعالیت قرآنی</h2><p>استان و شهرستان سکونت برای تکمیل این مرحله الزامی است؛ بقیهٔ فیلدها اختیاری‌اند و محل فعالیت قرآنی به‌صورت جداگانه ثبت می‌شود.</p></div>
+      <div className={"residence-wrap" + flagClass(flagSections, "residence")} data-section="residence">
       <h3 className="form-subhead">محل سکونت</h3>
       <div className="form-grid">
         <label>استان <i>*</i><select name="provinceId" required data-selected-value={provinceId} value={provinceId} onChange={(event) => { setProvinceId(event.target.value); setCountyId(""); }}><option value="">انتخاب استان</option>{provinces.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
@@ -177,6 +183,7 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
         <label>شهر / محل سکونت<input {...bind("city")} maxLength={120} placeholder="نام شهر" /></label>
         <label>کد پستی<input {...bind("postalCode")} inputMode="numeric" maxLength={10} placeholder="کد پستی ۱۰ رقمی" /></label>
         <label className="full-field">نشانی<textarea {...bind("address")} maxLength={1000} rows={3} placeholder="نشانی محل سکونت" /></label>
+      </div>
       </div>
       <h3 className="form-subhead">محل فعالیت قرآنی</h3>
       <div className="form-grid">
@@ -193,7 +200,7 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
 
 /* ------------------- مرحلهٔ ۳ — تخصص‌ها و سوابق ------------------- */
 
-export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean }) {
+export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, flagSections }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; flagSections?: string[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveSpecialtiesStepAction, initialActionState);
   const [selectedSpecialties, setSelectedSpecialties] = useState<Set<number>>(() => new Set(defaults.specialtyIds));
   const [specialtyDetailState, setSpecialtyDetailState] = useState<Record<number, DetailState>>(() => {
@@ -306,7 +313,8 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     {state.error && <div className="form-error profile-error" role="alert">{state.error}</div>}
     <section className="form-section">
       <div className="form-section-head"><h2>تخصص‌های قرآنی</h2><p>برای تکمیل این مرحله، انتخاب حداقل یک تخصص الزامی است و جزئیات هر تخصص دارای جزئیات (میزان حفظ، سطح قرائت یا نقش‌ها) باید کامل شود.</p></div>
-      <div className="specialty-grid">{specialties.map((item) => <label key={item.id}><input type="checkbox" name="specialties" value={item.id} checked={selectedSpecialties.has(item.id)} onChange={() => toggleSpecialty(item.id)} /><span>{item.title}</span></label>)}</div>
+      <div className={"specialty-grid" + flagClass(flagSections, "specialty-grid")} data-section="specialty-grid">{specialties.map((item) => <label key={item.id}><input type="checkbox" name="specialties" value={item.id} checked={selectedSpecialties.has(item.id)} onChange={() => toggleSpecialty(item.id)} /><span>{item.title}</span></label>)}</div>
+      <div className={"specialty-details-wrap" + flagClass(flagSections, "specialty-details")} data-section="specialty-details">
       {specialties.filter((item) => {
         const spec = specialtyDetailSpec[item.code];
         return selectedSpecialties.has(item.id) && spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist");
@@ -330,6 +338,7 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
           <SectionUpload section={`specialty:${item.code}`} slots={certSlots[item.id] || []} onChange={(next) => setCertSlots((current) => ({ ...current, [item.id]: next }))} label="بارگذاری گواهی تخصص" />
         </div>;
       })}
+      </div>
       {authorSpecialty && selectedSpecialties.has(authorSpecialty.id) && <div className="writings-block">
         {defaults.writings.length > 0 && <div className="education-existing"><h3 className="form-subhead">آثار ثبت‌شده این پرونده</h3><ul>{defaults.writings.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.workTypeLabel, item.topic].filter(Boolean).join(" · ")}</small></li>)}</ul><small>حذف یا افزودن به این فهرست از صفحه جزئیات پرونده نیز امکان‌پذیر است؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {writingRows.length > 0 && <div className="education-rows">{writingRows.map((row, index) => <div className="education-row" key={index}><div className="writing-row-grid">

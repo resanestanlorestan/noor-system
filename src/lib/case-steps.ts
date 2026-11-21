@@ -211,3 +211,95 @@ export function firstIncompleteMessage(plan: CaseStepPlan, skipKey?: CaseStepKey
   const detail = first.missing.length ? ` موارد ناقص: ${first.missing.join("، ")}.` : "";
   return `مرحلهٔ «${first.title}» هنوز کامل نشده است.${detail} از ویزارد ثبت اطلاعات برای تکمیل آن استفاده کنید.`;
 }
+
+// الحاقیهٔ ۲.۱۹.۳ — بررسی هوشمند آمادگی ارسال
+// -----------------------------------------------------------
+// دکمهٔ «بررسی آمادگی ارسال» در مرحلهٔ ۵ همیشه فعال است: با کلیک، همهٔ
+// مراحل از دادهٔ واقعی کنترل می‌شوند؛ در صورت نقص، کاربر مستقیماً به
+// اولین مرحلهٔ مشکل‌دار هدایت می‌شود، فیلدها/بخش‌های ناقص با پرچم و
+// راهنمای اختصاصی مشخص می‌شوند و پس از اصلاح، همان دکمه دوباره همه را
+// از نو کنترل می‌کند. ارسال نهایی همچنان فقط پس از «آماده» بودن (ready)
+// باز می‌شود و گارد سروری همان است که advanceCase اعمال می‌کند.
+
+/** Guidance for one missing item — actionable, points at the exact field. */
+export const READINESS_HINTS: Record<string, string> = {
+  "نام و نام خانوادگی": "فیلدهای «نام» و «نام خانوادگی» در بخش «اطلاعات هویتی و تماس» خالی است؛ هر دو را پر کنید.",
+  "نام پدر": "فیلد «نام پدر» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "کد ملی معتبر": "کد ملی ۱۰ رقمی معتبر در بخش «اطلاعات هویتی و تماس» ثبت نشده است؛ کد ملی را وارد کنید.",
+  "شماره شناسنامه": "فیلد «شماره شناسنامه» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "محل صدور شناسنامه": "فیلد «محل صدور شناسنامه» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "تاریخ تولد شمسی": "تاریخ تولد را از تقویم شمسی در بخش «اطلاعات هویتی و تماس» انتخاب کنید.",
+  "جنسیت": "گزینهٔ «جنسیت» را در بخش «اطلاعات هویتی و تماس» انتخاب کنید.",
+  "شماره تماس": "فیلد «شماره همراه» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "شماره همراه جایگزین": "فیلد «شماره همراه جایگزین» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "استان و شهرستان سکونت": "در بخش «محل سکونت» ابتدا استان و سپس شهرستان را از فهرست انتخاب و فرم را ذخیره کنید.",
+  "حداقل یک تخصص قرآنی": "در بخش «تخصص‌های قرآنی» حداقل یک تخصص را تیک بزنید.",
+  "حداقل یک مدرک پشتیبان": "در بخش «مدارک پشتیبان» حداقل یک مدرک (تصویر کارت ملی، مدرک تحصیلی یا گواهی) بارگذاری کنید.",
+  "تصویر پرسنلی": "در بخش «تصویر پرسنلی» تصویر پرسنلی PNG یا JPEG با حداکثر حجم ۵۰۰ کیلوبایت بارگذاری کنید.",
+  "پاسخ درخواست اصلاح پرونده": "ابتدا پاسخ درخواست اصلاح را در صفحهٔ جزئیات پرونده ثبت کنید.",
+  "بارگذاری یا پاسخ مدارک درخواستی": "برای درخواست‌های مدرک باز، هنگام بارگذاری، درخواست مربوط را انتخاب کنید یا از صفحهٔ پرونده پاسخ ثبت کنید.",
+};
+
+/** Items raised by gates other than the four step engines. */
+export const CORRECTION_REQUEST_LABEL = "پاسخ درخواست اصلاح پرونده";
+export const DOC_REQUESTS_LABEL = "بارگذاری یا پاسخ مدارک درخواستی";
+
+const SPECIALTY_DETAIL_PREFIX = "جزئیات تخصص‌ها";
+
+export const READINESS_FALLBACK_HINT = "این مورد را در مرحلهٔ مربوط تکمیل و فرم همان مرحله را ذخیره کنید.";
+
+/** Guidance lookup: exact match, then prefix match (تخصص‌های دارای جزئیات
+ *  برچسب پیشوندی می‌سازند)، در نهایت پیام عمومی. */
+export function readinessHint(label: string): string {
+  const exact = READINESS_HINTS[label];
+  if (exact) return exact;
+  if (label.startsWith(SPECIALTY_DETAIL_PREFIX)) return "برای هر تخصص انتخاب‌شدهٔ دارای جزئیات (میزان حفظ، سطح قرائت یا نقش‌ها)، مقدار جزئیات را در کارت همان تخصص کامل کنید.";
+  return READINESS_FALLBACK_HINT;
+}
+
+export type ReadinessItem = { label: string; hint: string; section?: string };
+export type ReadinessIssue = { step: number; stepKey: CaseStepKey; stepTitle: string; items: ReadinessItem[] };
+
+/** Section flag per missing label — the wizard pages highlight these
+ *  containers when the readiness check redirects with ?check=1. */
+function sectionForLabel(label: string): string | undefined {
+  if (label === "حداقل یک تخصص قرآنی") return "specialty-grid";
+  if (label.startsWith(SPECIALTY_DETAIL_PREFIX)) return "specialty-details";
+  if (label === "تصویر پرسنلی") return "sec-photo";
+  if (label === "حداقل یک مدرک پشتیبان") return "sec-evidence";
+  if (label === DOC_REQUESTS_LABEL) return "sec-evidence";
+  if (label === "استان و شهرستان سکونت") return "residence";
+  if (READINESS_HINTS[label]) return "identity-fields";
+  return undefined;
+}
+
+/** Structured readiness report: every incomplete item grouped under its
+ *  step, each with a guidance hint and the section to flag. The extra
+ *  gates (open correction / document requests) are the same two checks
+ *  advanceCase enforces inside its transaction. */
+export function collectReadinessIssues(facts: CaseStepFacts, extra: { openCorrection?: boolean; openDocRequests?: number } = {}): ReadinessIssue[] {
+  const issues: ReadinessIssue[] = [];
+  const identity = identityMissing(facts.person);
+  if (identity.length) issues.push({ step: 1, stepKey: "identity", stepTitle: CASE_STEPS[0].title, items: identity.map((label) => ({ label, hint: readinessHint(label), section: sectionForLabel(label) })) });
+  const location = locationMissing(facts.person);
+  if (location.length) issues.push({ step: 2, stepKey: "location", stepTitle: CASE_STEPS[1].title, items: location.map((label) => ({ label, hint: readinessHint(label), section: sectionForLabel(label) })) });
+  const specialties = specialtiesMissing(facts);
+  if (specialties.length) issues.push({ step: 3, stepKey: "specialties", stepTitle: CASE_STEPS[2].title, items: specialties.map((label) => ({ label, hint: readinessHint(label), section: sectionForLabel(label) })) });
+  const documents = documentsMissing(facts);
+  const documentItems: ReadinessItem[] = documents.map((label) => ({ label, hint: readinessHint(label), section: sectionForLabel(label) }));
+  if (extra.openDocRequests) documentItems.push({ label: DOC_REQUESTS_LABEL, hint: readinessHint(DOC_REQUESTS_LABEL), section: "sec-evidence" });
+  if (documentItems.length) issues.push({ step: 4, stepKey: "documents", stepTitle: CASE_STEPS[3].title, items: documentItems });
+  if (extra.openCorrection) issues.push({ step: 5, stepKey: "review", stepTitle: CASE_STEPS[4].title, items: [{ label: CORRECTION_REQUEST_LABEL, hint: readinessHint(CORRECTION_REQUEST_LABEL) }] });
+  return issues;
+}
+
+/** Section flags for one wizard step view — used by the step pages to
+ *  outline exactly the incomplete containers after a readiness redirect. */
+export function readinessFlagSections(step: Pick<CaseStepView, "missing">): string[] {
+  const sections = new Set<string>();
+  for (const label of step.missing) {
+    const section = sectionForLabel(label);
+    if (section) sections.add(section);
+  }
+  return [...sections];
+}

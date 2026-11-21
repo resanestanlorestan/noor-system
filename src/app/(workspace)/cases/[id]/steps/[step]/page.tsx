@@ -3,17 +3,19 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRight, CheckCircle2, Download, FileText, Pencil, Send, ShieldCheck, UserRound } from "lucide-react";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, counties, documentRequests, documents, educationRecords, educationalCourses, provinces, specialties, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, correctionRequests, counties, documentRequests, documents, educationRecords, educationalCourses, provinces, specialties, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getCaseForUser } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { faDate, faNumber, isoToJalali } from "@/lib/format";
 import { activityRecordKindLabels, courseFieldOptions, documentTypeLabels, educationTypeLabels, statusLabels, writingTypeLabels } from "@/lib/constants";
-import { CASE_STEPS, computeCaseSteps, loadCaseStepFacts } from "@/lib/case-steps";
+import { CASE_STEPS, collectReadinessIssues, computeCaseSteps, loadCaseStepFacts, readinessFlagSections, DOC_REQUESTS_LABEL } from "@/lib/case-steps";
 import { CaseStepsBar } from "@/components/case-progress";
 import { IdentityStepForm, LocationStepForm, SpecialtiesStepForm } from "@/components/case-steps-forms";
 import { ConfirmButton, DocumentUpload, PhotoRemove, PhotoUpload } from "@/components/case-controls";
-import { prepareCaseAction, submitCaseAction } from "@/app/actions/cases";
+import { ReadinessBanner } from "@/components/readiness-banner";
+import { FlagFocus } from "@/components/flag-focus";
+import { checkReadinessAction, submitCaseAction } from "@/app/actions/cases";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
@@ -24,10 +26,13 @@ const fa = new Intl.NumberFormat("fa-IR");
 // الحاقیهٔ ۲.۱۰.۰ — صفحات مراحل ویزارد ثبت اطلاعات. ورود به هر مرحله در سرور
 // کنترل می‌شود: مراحل قفل با ریدایرکت اجباری به مرحلهٔ جاری بسته می‌شوند؛
 // تغییر دستی URL یا ورود مستقیم با لینک راهی به عبور از زنجیره ندارد.
-export default async function CaseStepPage({ params, searchParams }: { params: Promise<{ id: string; step: string }>; searchParams: Promise<{ locked?: string }> }) {
+export default async function CaseStepPage({ params, searchParams }: { params: Promise<{ id: string; step: string }>; searchParams: Promise<{ locked?: string; check?: string }> }) {
   const user = await requireUser();
   const { id, step: stepParam } = await params;
   const query = await searchParams;
+  // الحاقیهٔ ۲.۱۹.۳ — ?check=1 یعنی رسیدن از «بررسی آمادگی ارسال»: بنر راهنما
+  // رندر، بخش‌های ناقص هایلایت و با FlagFocus اسکرول نرم به اولین مورد انجام می‌شود.
+  const checkMode = query.check === "1";
   const row = await getCaseForUser(user, id);
   if (!row) notFound();
   if (!EDITABLE_STATUSES.includes(row.application.status as EditableStatus) || !(await can(user, "cases.edit"))) redirect(`/cases/${id}`);
@@ -54,14 +59,14 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
     const docName = (id: string | null) => id ? eduDocs.find((item) => item.id === id)?.name ?? null : null;
     const universityEdu = eduRows.find((item) => item.type === "university");
     const seminaryEdu = eduRows.find((item) => item.type === "seminary");
-    return <>{head}<section className="ws-panel form-panel"><IdentityStepForm caseId={id} hasNationalId={Boolean(person.nationalIdHash)} needsChangeReason={nonActivistEditor} defaults={{ firstName: person.firstName, lastName: person.lastName, fatherName: person.fatherName || "", idCardNumber: person.idCardNumber || "", idIssuePlace: person.idIssuePlace || "", birthDate: isoToJalali(person.birthDate), gender: person.gender || "", phone: person.phone || "", alternatePhone: person.alternatePhone || "", contactEmail: person.email || "", universityLevel: universityEdu?.level || "", seminaryLevel: seminaryEdu?.level || "", universityDocName: docName(universityEdu?.documentId ?? null) ?? undefined, seminaryDocName: docName(seminaryEdu?.documentId ?? null) ?? undefined }} /></section></>;
+    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<IdentityStepForm caseId={id} hasNationalId={Boolean(person.nationalIdHash)} needsChangeReason={nonActivistEditor} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ firstName: person.firstName, lastName: person.lastName, fatherName: person.fatherName || "", idCardNumber: person.idCardNumber || "", idIssuePlace: person.idIssuePlace || "", birthDate: isoToJalali(person.birthDate), gender: person.gender || "", phone: person.phone || "", alternatePhone: person.alternatePhone || "", contactEmail: person.email || "", universityLevel: universityEdu?.level || "", seminaryLevel: seminaryEdu?.level || "", universityDocName: docName(universityEdu?.documentId ?? null) ?? undefined, seminaryDocName: docName(seminaryEdu?.documentId ?? null) ?? undefined }} /></section></>;
   }
 
   if (requested.key === "location") {
     const allProvinces = await db.select().from(provinces).orderBy(provinces.name);
     const allCounties = await db.select().from(counties).orderBy(counties.name);
     const limited = user.effectiveRole !== "super_admin" && user.effectiveRole !== "activist";
-    return <>{head}<section className="ws-panel form-panel"><LocationStepForm caseId={id} provinces={limited ? allProvinces.filter((item) => item.id === user.provinceId) : allProvinces} counties={limited && user.countyId ? allCounties.filter((item) => item.id === user.countyId) : allCounties} activityProvinces={allProvinces} activityCounties={allCounties} needsChangeReason={nonActivistEditor} defaults={{ provinceId: person.provinceId, countyId: person.countyId, city: person.city || "", postalCode: person.postalCode || "", address: person.address || "", activityProvinceId: person.activityProvinceId, activityCountyId: person.activityCountyId, activityPlace: person.activityPlace || "", organization: person.organization || "" }} /></section></>;
+    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<LocationStepForm caseId={id} provinces={limited ? allProvinces.filter((item) => item.id === user.provinceId) : allProvinces} counties={limited && user.countyId ? allCounties.filter((item) => item.id === user.countyId) : allCounties} activityProvinces={allProvinces} activityCounties={allCounties} needsChangeReason={nonActivistEditor} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ provinceId: person.provinceId, countyId: person.countyId, city: person.city || "", postalCode: person.postalCode || "", address: person.address || "", activityProvinceId: person.activityProvinceId, activityCountyId: person.activityCountyId, activityPlace: person.activityPlace || "", organization: person.organization || "" }} /></section></>;
   }
 
   if (requested.key === "specialties") {
@@ -75,7 +80,7 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
       db.select().from(educationalCourses).where(eq(educationalCourses.activistId, person.id)).orderBy(educationalCourses.createdAt),
       db.select().from(activityRecords).where(eq(activityRecords.activistId, person.id)).orderBy(activityRecords.createdAt),
     ]);
-    return <>{head}<section className="ws-panel form-panel"><SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
+    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
   }
 
   if (requested.key === "documents") {
@@ -86,9 +91,15 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
     const evidenceDocs = docRows.filter((doc) => doc.kind === "evidence");
     const openRequests = docRequestRows.filter((item) => item.request.status === "open").map(({ request }) => ({ id: request.id, title: request.title }));
     const complete = requested.status === "completed";
+    // الحاقیهٔ ۲.۱۹.۳ — بنر و پرچم بررسی آمادگی: درخواست‌های مدرک باز هم
+    // به‌عنوان مورد ناقص این مرحله گزارش و بخش بارگذاری هایلایت می‌شود.
+    const checkItems = [...requested.missing, ...(openRequests.length ? [DOC_REQUESTS_LABEL] : [])];
+    const checkFlags = checkMode ? readinessFlagSections({ missing: checkItems }) : [];
     return <>{head}<section className="ws-panel form-panel doc-step-panel">
+      {checkMode && <ReadinessBanner stepNumber={stepNumber} items={checkItems} />}
+      {checkMode && checkItems.length ? <FlagFocus /> : null}
       {requested.missing.length ? <div className="form-error" role="alert">برای تکمیل این مرحله: {requested.missing.join("، ")}</div> : <div className="form-success" role="status"><CheckCircle2 size={16} /> این مرحله کامل شده است{stepNumber < CASE_STEPS.length && <> — <Link href={`/cases/${id}/steps/${stepNumber + 1}`}>ادامه به مرحلهٔ بعدی ←</Link></>}</div>}
-      <div className="form-section">
+      <div className={"form-section" + (checkFlags.includes("sec-photo") ? " section-flagged" : "")} data-section="sec-photo">
         <div className="form-section-head"><h2>تصویر پرسنلی</h2><p>الحاقیهٔ ۲.۹.۳: ارسال پرونده بدون تصویر پرسنلی ممکن نیست؛ تصویر باید PNG یا JPEG و حداکثر ۵۰۰ کیلوبایت باشد.</p></div>
         <div className="identity-photo-tools">
           {person.photoDocumentId ? <div className="profile-photo-box has-photo"><img src={`/api/documents/${person.photoDocumentId}`} alt="تصویر پرسنلی ثبت‌شده" width={76} height={76} /><div><strong>تصویر پرسنلی ثبت شده است</strong><p>برای تعویض، تصویر تازه بارگذاری کنید یا تصویر فعلی را حذف کنید.</p></div></div> : <div className="profile-photo-box missing" role="alert"><div><strong>تصویر پرسنلی هنوز بارگذاری نشده است</strong><p>ارسال پرونده بدون تصویر پرسنلی ممکن نیست.</p></div></div>}
@@ -96,7 +107,7 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
           {person.photoDocumentId ? <PhotoRemove caseId={id} /> : null}
         </div>
       </div>
-      <div className="form-section">
+      <div className={"form-section" + (checkFlags.includes("sec-evidence") ? " section-flagged" : "")} data-section="sec-evidence">
         <div className="form-section-head"><h2>مدارک پشتیبان</h2><p>حداقل یک مدرک پشتیبان (تصویر کارت ملی، مدارک تحصیلی یا گواهی‌ها) بارگذاری کنید؛ هر مدرک می‌تواند به سوابق پرونده هم متصل شود.</p></div>
         {evidenceDocs.length ? <div className="document-list">{evidenceDocs.map((doc) => <div key={doc.id}><span className="file-icon"><FileText size={18} /></span><div><strong>{doc.title}</strong><small>{doc.docType && doc.docType in documentTypeLabels ? `${documentTypeLabels[doc.docType as keyof typeof documentTypeLabels]} · ` : ""}{doc.docNumber ? `شماره ${doc.docNumber} · ` : ""}{doc.originalName} · {faNumber(Math.ceil(doc.size / 1024))} کیلوبایت · {faDate(doc.createdAt, true)}</small></div><a href={`/api/documents/${doc.id}`}><Download size={16} /> دریافت</a></div>)}</div> : <div className="inline-empty">هنوز مدرکی بارگذاری نشده است.</div>}
         <DocumentUpload caseId={id} openRequests={openRequests} />
@@ -106,12 +117,23 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
   }
 
   // مرحلهٔ آخر — بازبینی و ارسال
-  const [provinceRow, countyRow, specTitles, evidenceRows] = await Promise.all([
+  const [provinceRow, countyRow, specTitles, evidenceRows, correctionRows, docRequestRows] = await Promise.all([
     person.provinceId ? db.select({ name: provinces.name }).from(provinces).where(eq(provinces.id, person.provinceId)).limit(1) : Promise.resolve([]),
     person.countyId ? db.select({ name: counties.name }).from(counties).where(eq(counties.id, person.countyId)).limit(1) : Promise.resolve([]),
     db.select({ title: specialties.title }).from(activistSpecialties).innerJoin(specialties, eq(activistSpecialties.specialtyId, specialties.id)).where(eq(activistSpecialties.activistId, person.id)),
     db.select({ id: documents.id }).from(documents).where(and(eq(documents.applicationId, id), eq(documents.kind, "evidence"))),
+    db.select({ status: correctionRequests.status }).from(correctionRequests).where(eq(correctionRequests.applicationId, id)),
+    db.select({ status: documentRequests.status }).from(documentRequests).where(eq(documentRequests.applicationId, id)),
   ]);
+  // الحاقیهٔ ۲.۱۹.۳ — گزارش ساخت‌یافتهٔ آمادگی: هر مورد ناقص زیر مرحلهٔ خودش،
+  // با پرش مستقیم به همان مرحله؛ کاربر برای یافتن ایرادها مراحل را دستی
+  // مرور نمی‌کند. گاردهای باز (اصلاح/مدارک درخواستی) همان‌هایی هستند که
+  // advanceCase در تراکنش کنترل می‌کند.
+  const readinessIssues = collectReadinessIssues(facts, {
+    openCorrection: correctionRows.some((item) => item.status === "open"),
+    openDocRequests: docRequestRows.filter((item) => item.status === "open").length,
+  });
+  const readinessTotal = readinessIssues.reduce((total, issue) => total + issue.items.length, 0);
   const identityRows: Array<[string, string]> = [
     ["نام و نام خانوادگی", `${person.firstName} ${person.lastName}`],
     ["نام پدر", person.fatherName || "—"],
@@ -129,7 +151,17 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
     ["محل فعالیت", person.activityPlace || person.organization || "—"],
   ];
   return <>{head}<section className="ws-panel form-panel review-panel">
-    {app.status === "ready" ? <div className="form-success" role="status"><CheckCircle2 size={16} /> اطلاعات کنترل شده و پرونده آماده ارسال است.</div> : requested.missing.length ? <div className="form-error" role="alert">موارد ناقص برای ارسال: {requested.missing.join("، ")}</div> : null}
+    {app.status === "ready" ? <div className="form-success" role="status"><CheckCircle2 size={16} /> اطلاعات کنترل شده و پرونده آماده ارسال است.</div>
+      : readinessIssues.length ? <div className="readiness-summary" role="alert">
+        <strong><ShieldCheck size={15} /> بررسی هوشمند آمادگی — {fa.format(readinessTotal)} مورد نیازمند اصلاح در {fa.format(readinessIssues.length)} مرحله</strong>
+        <ul>{readinessIssues.map((issue) => <li key={issue.step}>
+          <span className="readiness-issue-step">مرحلهٔ {fa.format(issue.step)} · {issue.stepTitle}</span>
+          <em>{issue.items.map((item) => item.label).join("، ")}</em>
+          <Link className="secondary-button" href={issue.step < CASE_STEPS.length ? `/cases/${id}/steps/${issue.step}?check=1` : `/cases/${id}`}>{issue.step < CASE_STEPS.length ? "رفتن به مرحله و اصلاح ←" : "رفتن به پرونده ←"}</Link>
+        </li>)}</ul>
+        <small>نیازی به مرور دستی مراحل نیست؛ با هر کلیک روی «بررسی آمادگی ارسال» همهٔ مراحل از دادهٔ واقعی کنترل می‌شوند و به اولین مرحلهٔ مشکل‌دار هدایت می‌شوید. پس از اصلاح و ذخیرهٔ هر مرحله، دوباره همین دکمه را بزنید.</small>
+      </div>
+      : <div className="form-success" role="status"><CheckCircle2 size={16} /> همهٔ مراحل تکمیل است؛ با زدن «بررسی آمادگی ارسال» کنترل نهایی انجام و پرونده آمادهٔ ارسال می‌شود.</div>}
     <div className="review-grid">
       <div className="review-block"><div className="review-block-head"><div><span>مرحلهٔ ۱</span><h3>اطلاعات هویتی و تماس</h3></div><Link className="secondary-button" href={`/cases/${id}/steps/1`}><Pencil size={14} /> ویرایش</Link></div>
         <dl>{identityRows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>
@@ -147,7 +179,7 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
         </dl></div>
     </div>
     <div className="review-actions">
-      {app.status !== "ready" ? <form action={prepareCaseAction}><input type="hidden" name="caseId" value={id} /><button className="primary-button" disabled={requested.missing.length > 0}><ShieldCheck size={16} /> بررسی آمادگی ارسال</button></form> : <form action={submitCaseAction}><input type="hidden" name="caseId" value={id} /><ConfirmButton className="primary-button" name="submit" value="yes" confirmText="پرونده برای بررسی ارسال شود؟"><Send size={16} /> ارسال برای بررسی</ConfirmButton></form>}
+      {app.status !== "ready" ? <form action={checkReadinessAction}><input type="hidden" name="caseId" value={id} /><button className="primary-button"><ShieldCheck size={16} /> بررسی آمادگی ارسال</button></form> : <form action={submitCaseAction}><input type="hidden" name="caseId" value={id} /><ConfirmButton className="primary-button" name="submit" value="yes" confirmText="پرونده برای بررسی ارسال شود؟"><Send size={16} /> ارسال برای بررسی</ConfirmButton></form>}
       <p className="side-description">وضعیت فعلی پرونده: <strong>{statusLabels[app.status]}</strong>{app.status === "pending" ? " — پرونده ارسال شده و در انتظار بررسی است." : app.status === "ready" ? " — پس از ارسال، وضعیت به «در انتظار بررسی» تغییر می‌کند." : ""}</p>
     </div>
   </section></>;

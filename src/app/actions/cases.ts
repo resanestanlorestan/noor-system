@@ -24,7 +24,7 @@ import { field } from "@/lib/case-input";
 // الحاقیهٔ ۲.۱۰.۰ — قفل مراحل ثبت: بارگذاری مدرک/تصویر و آماده‌سازی/ارسال
 // پرونده فقط پس از تکمیل و ذخیرهٔ مراحل قبلی مجاز است؛ کنترل در سرور انجام
 // می‌شود و به ظاهر فرم‌ها وابسته نیست.
-import { CASE_STEPS, computeCaseSteps, firstIncompleteMessage, loadCaseStepFacts, stepGateError } from "@/lib/case-steps";
+import { CASE_STEPS, collectReadinessIssues, computeCaseSteps, firstIncompleteMessage, loadCaseStepFacts, stepGateError } from "@/lib/case-steps";
 import type { ActionState } from "@/lib/action-state";
 
 const messageRedirect: (id: string, message: string) => never = (id, message) => redirect(`/cases/${id}?m=${stashFlash(message)}`);
@@ -32,10 +32,13 @@ const messageRedirect: (id: string, message: string) => never = (id, message) =>
 const EDITABLE_STATUSES = ["draft", "completing", "needs_correction"] as const;
 type EditableStatus = (typeof EDITABLE_STATUSES)[number];
 
-async function advanceCase(data: FormData, target: "ready" | "pending") {
+// dest الحاقیهٔ ۲.۱۹.۳ — مقصد ریدایرکت موفقیت؛ بررسی آمادگی کاربر را روی
+// خودِ مرحلهٔ بازبینی نگه می‌دارد تا بلافاصله دکمهٔ «ارسال برای بررسی» را ببیند.
+async function advanceCase(data: FormData, target: "ready" | "pending", dest?: string) {
   const user = await requireUser(); const id = field(data, "caseId", 40); const row = await getCaseForUser(user, id);
+  const go: (message: string) => never = (message) => redirect(`${dest ?? `/cases/${id}`}?m=${stashFlash(message)}`);
   const allowed: readonly string[] = target === "ready" ? EDITABLE_STATUSES : ["ready"];
-  if (!row || !allowed.includes(row.application.status)) messageRedirect(id, "این انتقال برای وضعیت فعلی مجاز نیست.");
+  if (!row || !allowed.includes(row.application.status)) go("این انتقال برای وضعیت فعلی مجاز نیست.");
   const result = await db.transaction(async (tx) => {
     const [locked] = await tx.select({ application: applications, activist: activists }).from(applications).innerJoin(activists, eq(applications.activistId, activists.id)).where(eq(applications.id, id)).for("update");
     if (!locked || locked.application.status !== row.application.status) return "وضعیت پرونده تغییر کرده است؛ دوباره تلاش کنید.";
@@ -72,16 +75,42 @@ async function advanceCase(data: FormData, target: "ready" | "pending") {
     }
     return null;
   });
-  if (result) messageRedirect(id, result);
+  if (result) go(result);
   // الحاقیهٔ ۲.۱۵.۰ — وب‌هوک رویداد «ارسال برای بررسی» برای سامانه‌های خارجی
   if (target === "pending") void dispatchWebhookEvent("case.submitted", { caseId: id, status: "pending" });
   // الحاقیهٔ ۲.۱۶.۰ — پیامک خودکار «ثبت پروندهٔ جدید» برای مدیران فعال فهرست اطلاع‌رسانی
   if (target === "pending") void dispatchCaseCreatedSms(id, user.fullName, user.id);
   void deliverOutbox();
-  revalidatePath("/dashboard"); revalidatePath("/cases"); messageRedirect(id, target === "ready" ? "پرونده آماده ارسال است؛ برای بررسی آن را ارسال کنید." : "پرونده برای بررسی ارسال شد.");
+  revalidatePath("/dashboard"); revalidatePath("/cases"); go(target === "ready" ? "پرونده آماده ارسال است؛ برای بررسی آن را ارسال کنید." : "پرونده برای بررسی ارسال شد.");
 }
 export async function prepareCaseAction(data: FormData) { await advanceCase(data, "ready"); }
 export async function submitCaseAction(data: FormData) { await advanceCase(data, "pending"); }
+
+// الحاقیهٔ ۲.۱۹.۳ — «بررسی آمادگی ارسال» هوشمند: دکمه همیشه فعال است و با
+// هر کلیک همهٔ مراحل و گاردها (اصلاحات باز، مدارک درخواستی) از دادهٔ واقعی
+// کنترل می‌شوند. اگر نقصی باشد کاربر مستقیماً به اولین مرحلهٔ مشکل‌دار
+// (?check=1) هدایت می‌شود تا فیلدهای ناقص با راهنما هایلایت شوند؛ اگر همه
+// چیز کامل باشد، همان کنش آماده‌سازیِ advanceCase انجام و آمادگی تأیید می‌شود.
+export async function checkReadinessAction(data: FormData) {
+  const user = await requireUser(); const id = field(data, "caseId", 40); const row = await getCaseForUser(user, id);
+  if (!row || !EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) messageRedirect(id, "بررسی آمادگی در این وضعیت پرونده مجاز نیست.");
+  const [facts, correctionRows, docRequestRows] = await Promise.all([
+    loadCaseStepFacts(row.activist, row.application.status, id),
+    db.select({ status: correctionRequests.status }).from(correctionRequests).where(eq(correctionRequests.applicationId, id)),
+    db.select({ status: documentRequests.status }).from(documentRequests).where(eq(documentRequests.applicationId, id)),
+  ]);
+  const issues = collectReadinessIssues(facts, {
+    openCorrection: correctionRows.some((item) => item.status === "open"),
+    openDocRequests: docRequestRows.filter((item) => item.status === "open").length,
+  });
+  if (issues.length) {
+    const first = issues[0];
+    const fa = new Intl.NumberFormat("fa-IR");
+    const summary = `بررسی آمادگی ارسال: ${fa.format(issues.reduce((total, issue) => total + issue.items.length, 0))} مورد نیازمند اصلاح در ${fa.format(issues.length)} مرحله — هدایت به مرحلهٔ ${fa.format(first.step)} (${first.stepTitle}).`;
+    redirect(`/cases/${id}/steps/${first.step}?check=1&m=${stashFlash(summary)}`);
+  }
+  await advanceCase(data, "ready", `/cases/${id}/steps/${CASE_STEPS.length}`);
+}
 
 export async function returnToCompletingAction(data: FormData) {
   const user = await requireUser(); const id = field(data, "caseId", 40); const row = await getCaseForUser(user, id);

@@ -1230,3 +1230,27 @@
   .cls-stat { flex:1 1 30%; }
   .cls-session-row { grid-template-columns:1fr; }
 }
+
+/* الحاقیهٔ ۲.۱۹.۳ — بررسی هوشمند آمادگی ارسال (مرحلهٔ ۵ ویزارد پروندهٔ مرکب) */
+.readiness-banner { padding:12px 14px; border:1px solid var(--danger-line); background:var(--danger-tint); border-radius:10px; margin:0 0 14px; scroll-margin-top:96px; }
+.readiness-banner strong { display:flex; align-items:center; gap:7px; color:var(--danger-soft); font-size:12px; }
+.readiness-banner ul { margin:9px 0 0; padding:0; list-style:none; display:grid; gap:7px; }
+.readiness-banner li { display:flex; flex-wrap:wrap; gap:3px 7px; align-items:baseline; font-size:11px; line-height:1.9; color:var(--ink-body); }
+.readiness-banner li b { color:var(--danger-soft); white-space:nowrap; }
+.readiness-banner li span { color:var(--muted); }
+.readiness-banner small { display:block; margin-top:9px; font-size:10px; color:var(--muted-2); line-height:1.9; }
+.readiness-summary { padding:12px 14px; border:1px solid var(--danger-line); background:var(--danger-tint); border-radius:10px; margin-bottom:14px; }
+.readiness-summary strong { display:flex; align-items:center; gap:7px; color:var(--danger-soft); font-size:12px; }
+.readiness-summary ul { margin:10px 0 0; padding:0; list-style:none; display:grid; gap:8px; }
+.readiness-summary li { display:flex; flex-wrap:wrap; gap:5px 10px; align-items:center; font-size:11px; line-height:1.9; color:var(--ink-body); padding-bottom:8px; border-bottom:1px dashed var(--line); }
+.readiness-summary li:last-child { border-bottom:0; padding-bottom:0; }
+.readiness-issue-step { font-weight:700; white-space:nowrap; }
+.readiness-summary li em { font-style:normal; color:var(--muted); flex:1 1 240px; }
+.readiness-summary li .secondary-button { font-size:10px; padding:5px 9px; flex:none; }
+.readiness-summary small { display:block; margin-top:9px; font-size:10px; color:var(--muted-2); line-height:1.9; }
+.section-flagged { outline:2px solid var(--danger-soft); outline-offset:5px; border-radius:12px; animation:flag-pulse 1.6s ease-in-out 2; scroll-margin-top:96px; }
+@keyframes flag-pulse { 0%,100% { outline-color:var(--danger-soft); } 50% { outline-color:transparent; } }
+@media (max-width: 640px) {
+  .readiness-summary li { flex-direction:column; align-items:flex-start; gap:4px; }
+  .readiness-summary li em { flex-basis:auto; }
+}
