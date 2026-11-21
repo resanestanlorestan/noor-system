@@ -12,14 +12,14 @@ import { faDate, faNumber } from "@/lib/format";
 
 /** هشت مرحلهٔ عمر پرونده به ترتیب طبیعی گردش کار. */
 export const CASE_STAGES = [
-  { key: "initial", label: "ثبت‌نام اولیه", hint: "ایجاد پرونده در سامانه", color: "#8ba0b0" },
-  { key: "draft", label: "پیش‌نویس", hint: "تکمیل اطلاعات پایه توسط فعال", color: "#9db1c4" },
-  { key: "completing", label: "در حال تکمیل", hint: "بارگذاری مدارک و تکمیل بخش‌ها", color: "#c5a76c" },
-  { key: "ready", label: "آماده ارسال", hint: "کنترل کامل بودن و آماده‌سازی", color: "#78b395" },
-  { key: "pending", label: "در انتظار بررسی", hint: "ارسال‌شده به کارتابل بررسی", color: "#d6a64b" },
-  { key: "specialist_review", label: "بررسی تخصصی", hint: "نظر تخصصی در جریان است", color: "#8b9fc5" },
-  { key: "needs_correction", label: "نیازمند اصلاح", hint: "شاخهٔ برگشتی برای رفع نقص", color: "#df8b67" },
-  { key: "final", label: "نتیجه نهایی", hint: "تأییدشده یا ردشده", color: "#46a16f" },
+  { key: "initial", label: "ثبت‌نام اولیه", hint: "ایجاد پرونده در سامانه", color: "#7fa3c9" },
+  { key: "draft", label: "پیش‌نویس", hint: "تکمیل اطلاعات پایه توسط فعال", color: "#94b1d6" },
+  { key: "completing", label: "در حال تکمیل", hint: "بارگذاری مدارک و تکمیل بخش‌ها", color: "#c9a35e" },
+  { key: "ready", label: "آماده ارسال", hint: "کنترل کامل بودن و آماده‌سازی", color: "#45b3a0" },
+  { key: "pending", label: "در انتظار بررسی", hint: "ارسال‌شده به کارتابل بررسی", color: "#d9a441" },
+  { key: "specialist_review", label: "بررسی تخصصی", hint: "نظر تخصصی در جریان است", color: "#6f8fd0" },
+  { key: "needs_correction", label: "نیازمند اصلاح", hint: "شاخهٔ برگشتی برای رفع نقص", color: "#e08b5f" },
+  { key: "final", label: "نتیجه نهایی", hint: "تأییدشده یا ردشده", color: "#0ea58c" },
 ] as const;
 export type CaseStageKey = (typeof CASE_STAGES)[number]["key"];
 

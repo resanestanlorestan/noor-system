@@ -27,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#f5f8f5",
+  themeColor: "#eef3f9",
 };
 
 // تمِ ذخیره‌شدهٔ کاربر از کوکی خوانده می‌شود تا در همان رندر سرور اعمال گردد؛

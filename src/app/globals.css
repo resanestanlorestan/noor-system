@@ -2,10 +2,12 @@
 
 /* ============================================================
    سیستم طراحی سامانه نور — دو تم رسمی
-   تم ۱ «روشن» — سبز مریم‌گلی + طلایی (پیش‌فرض برند)
-   تم ۲ «شبانه» — شب زمردی تیره با اکسنت‌های طلایی
+   تم ۱ «روشن» — سرمه‌ای سازمانی + فیروزه‌ای (پیش‌فرض برند)
+   تم ۲ «شبانه» — شب سرمه‌ای عمیق با اکسنت‌های فیروزه‌ای
    تم با data-theme روی <html> انتخاب می‌شود (light/dark)؛
    انتخاب کاربر در localStorage با کلید «noor-theme» ذخیره می‌شود.
+   (الحاقیهٔ ۲.۲۰.۰ — بازطراحی بصری؛ فقط مقادیر توکن‌ها عوض شد،
+   نام توکن‌ها و ساختار دست‌نخورده ماند تا هیچ منطقی تغییر نکند.)
    ============================================================ */
 
 :root,
@@ -13,136 +15,136 @@ html[data-theme="light"] {
   color-scheme: light;
 
   /* سطوح */
-  --bg: #f5f8f5;              /* پس‌زمینه صفحه */
-  --bg-soft: #f6f9f6;         /* پس‌زمینه نرم‌تر */
+  --bg: #eef3f9;              /* پس‌زمینه صفحه — خاکستری بسیار روشن با ته‌مایهٔ آبی */
+  --bg-soft: #f2f6fb;         /* پس‌زمینه نرم‌تر */
   --surface: #ffffff;         /* سطح کارت‌ها و پنل‌ها */
-  --surface-2: #fcfdfc;       /* سطح فرعی (ردیف‌ها، فیلدها) */
+  --surface-2: #f7fafd;       /* سطح فرعی (ردیف‌ها، فیلدها) */
 
   /* متن */
-  --ink: #1d342d;             /* متن اصلی */
-  --ink-soft: #24352f;        /* متن پررنگ ثانویه */
-  --ink-body: #263f32;        /* متن بدنه (.ws-app) */
-  --muted: #5b7565;           /* متن خنثی متوسط */
-  --muted-2: #8b9c91;         /* متن خنثی کم‌رنگ */
-  --muted-3: #a3b2a7;         /* برچسب‌های کم‌اهمیت */
+  --ink: #122b52;             /* متن اصلی — سرمه‌ای عمیق */
+  --ink-soft: #1d3a63;        /* متن پررنگ ثانویه */
+  --ink-body: #2c4568;        /* متن بدنه (.ws-app) */
+  --muted: #54698c;           /* متن خنثی متوسط */
+  --muted-2: #7d92b0;         /* متن خنثی کم‌رنگ */
+  --muted-3: #9aabc4;         /* برچسب‌های کم‌اهمیت */
 
   /* خطوط */
-  --line: #e8efea;            /* بوردر اصلی */
-  --line-soft: #edf2ee;       /* بوردر ملایم */
-  --line-strong: #c8ded0;     /* بوردر هاور */
+  --line: #e1e9f3;            /* بوردر اصلی */
+  --line-soft: #e9eff7;       /* بوردر ملایم */
+  --line-strong: #c3d5ea;     /* بوردر هاور */
 
-  /* برند سبز */
-  --brand: #145c43;           /* سبز اصلی دکمه/لوگو */
-  --brand-hover: #0e573b;     /* سبز هاور دکمه */
-  --brand-text: #145943;      /* متن سبز روی پس‌زمینه روشن */
-  --on-brand: #ffffff;        /* متن روی سبز */
+  /* برند فیروزه‌ای */
+  --brand: #0d9488;           /* فیروزهٔ اصلی دکمه/لوگو */
+  --brand-hover: #0b7f75;     /* فیروزه هاور دکمه */
+  --brand-text: #14315c;      /* متن تیترها و عناوین — سرمه‌ای */
+  --on-brand: #ffffff;        /* متن روی فیروزه */
 
   /* شست‌ها و چیپ‌ها */
-  --tint: #f5faf6;            /* پس‌زمینه هاور سبز خیلی ملایم */
-  --chip: #eaf5ed;            /* پس‌زمینه چیپ سبز */
-  --ring: #edf7ef;            /* حلقه فوکوس سبز ملایم */
+  --tint: #eef6f7;            /* پس‌زمینه هاور فیروزه خیلی ملایم */
+  --chip: #dcf1f1;            /* پس‌زمینه چیپ فیروزه */
+  --ring: #e3f4f4;            /* حلقه فوکوس فیروزه ملایم */
 
-  /* طلایی */
-  --gold: #b69b65;
-  --gold-text: #b19456;
-  --gold-bright: #c4ab74;
-  --gold-tint: #fbf6e9;
-  --gold-line: #efe8d2;
+  /* طلایی — حالت «در انتظار/هشدار ملایم» و تذهیب */
+  --gold: #c0913c;
+  --gold-text: #a3761f;
+  --gold-bright: #d1a24b;
+  --gold-tint: #fbf4e4;
+  --gold-line: #efe1c2;
 
   /* معنایی */
-  --danger: #c0564c;
-  --danger-soft: #ba645b;
-  --danger-tint: #fdf6f5;
-  --danger-line: #f1d9d5;
-  --success: #3f7d55;
-  --info: #4a6899;
-  --info-tint: #f1f4fb;
-  --info-line: #dfe7f4;
+  --danger: #cc4b44;
+  --danger-soft: #bf443e;
+  --danger-tint: #fdf4f3;
+  --danger-line: #f1d7d4;
+  --success: #0d9488;
+  --info: #2e6ed9;
+  --info-tint: #edf3fe;
+  --info-line: #d9e6fb;
 
   /* آیکون‌های آمار */
-  --mint-bg: #eaf5ee;   --mint-ink: #38835f;
-  --goldchip-bg: #f8f3e6; --goldchip-ink: #b19456;
-  --bluechip-bg: #eef5f5; --bluechip-ink: #679b99;
-  --lavchip-bg: #f1f1f9;  --lavchip-ink: #9094b6;
+  --mint-bg: #dcf1f1;   --mint-ink: #0b6f68;
+  --goldchip-bg: #faefdb; --goldchip-ink: #a3761f;
+  --bluechip-bg: #e7effd; --bluechip-ink: #2e6ed9;
+  --lavchip-bg: #eceafa;  --lavchip-ink: #6d5fcf;
 
   /* لینک و انتخاب */
-  --link: #438663;
-  --link-hover: #174f37;
-  --focus-ring: #bda876;
-  --selection-bg: #d9e9df;
-  --selection-ink: #174f3f;
+  --link: #0b7f75;
+  --link-hover: #095e57;
+  --focus-ring: #54b8b1;
+  --selection-bg: #d3ecef;
+  --selection-ink: #0b4f4a;
 
   /* سایه‌ها */
-  --shadow-tint: 18, 89, 67;         /* rgb سبز برای سایه‌های ملایم */
-  --shadow-backdrop: #0b2a1f80;
+  --shadow-tint: 18, 42, 82;         /* rgb سرمه‌ای برای سایه‌های ملایم */
+  --shadow-backdrop: #0a1c3380;
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
 
   /* سطوح */
-  --bg: #0c1411;
-  --bg-soft: #0e1713;
-  --surface: #131f19;
-  --surface-2: #182520;
+  --bg: #0a1120;
+  --bg-soft: #0c1524;
+  --surface: #101b30;
+  --surface-2: #152238;
 
   /* متن */
-  --ink: #e3ece6;
-  --ink-soft: #c9d8cf;
-  --ink-body: #dfe9e3;
-  --muted: #9db1a5;
-  --muted-2: #7f948a;
-  --muted-3: #647a70;
+  --ink: #e2eaf6;
+  --ink-soft: #c6d4e9;
+  --ink-body: #d9e3f2;
+  --muted: #92a5c2;
+  --muted-2: #6f86a6;
+  --muted-3: #597089;
 
   /* خطوط */
-  --line: #243630;
-  --line-soft: #1e2e28;
-  --line-strong: #2f4a3d;
+  --line: #20304b;
+  --line-soft: #182639;
+  --line-strong: #2d4263;
 
-  /* برند سبز — روی تاریک باید روشن‌تر باشد */
-  --brand: #2e7d5b;
-  --brand-hover: #276b4e;
-  --brand-text: #7ec9a3;
-  --on-brand: #f3faf5;
+  /* برند فیروزه — روی تاریک اکسنت روشن‌تر */
+  --brand: #0d9488;
+  --brand-hover: #0b7f75;
+  --brand-text: #7cdcd2;
+  --on-brand: #f2fbfa;
 
   /* شست‌ها و چیپ‌ها */
-  --tint: #17241e;
-  --chip: #1b2c25;
-  --ring: #1d3329;
+  --tint: #122030;
+  --chip: #153338;
+  --ring: #143c41;
 
   /* طلایی */
   --gold: #d2b677;
   --gold-text: #d5b87c;
   --gold-bright: #ddc28c;
-  --gold-tint: #2a281c;
-  --gold-line: #453f28;
+  --gold-tint: #2a2517;
+  --gold-line: #453d27;
 
   /* معنایی */
   --danger: #e0897f;
   --danger-soft: #d98d84;
-  --danger-tint: #33221f;
+  --danger-tint: #322020;
   --danger-line: #4a2c27;
-  --success: #6bbf8b;
-  --info: #8fb0d9;
-  --info-tint: #18222e;
+  --success: #2dd4bf;
+  --info: #7fb0f2;
+  --info-tint: #16233a;
   --info-line: #27354a;
 
   /* آیکون‌های آمار */
-  --mint-bg: #16291f;   --mint-ink: #7ec9a3;
-  --goldchip-bg: #2a2517; --goldchip-ink: #d5b87c;
-  --bluechip-bg: #16241f; --bluechip-ink: #8fbcb9;
-  --lavchip-bg: #221f2e;  --lavchip-ink: #a6abce;
+  --mint-bg: #0f2b2c;   --mint-ink: #5fd0c6;
+  --goldchip-bg: #2a2417; --goldchip-ink: #d5b87c;
+  --bluechip-bg: #14253f; --bluechip-ink: #7fb0f2;
+  --lavchip-bg: #201d33;  --lavchip-ink: #a9a3dd;
 
   /* لینک و انتخاب */
-  --link: #7ec9a3;
-  --link-hover: #a4dfc0;
+  --link: #5fd0c6;
+  --link-hover: #8fe3db;
   --focus-ring: #d2b677;
-  --selection-bg: #1d3a2c;
-  --selection-ink: #d9efe2;
+  --selection-bg: #123c42;
+  --selection-ink: #d5f1f2;
 
   /* سایه‌ها */
   --shadow-tint: 0, 0, 0;
-  --shadow-backdrop: #040a08c0;
+  --shadow-backdrop: #030914c0;
 }
 
 * { box-sizing: border-box; }
