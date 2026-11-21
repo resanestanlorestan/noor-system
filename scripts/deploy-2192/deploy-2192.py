@@ -6,8 +6,8 @@
 import base64, json, os, re, secrets, subprocess, sys, time
 
 ZIP = "/home/z/my-project/download/noor-slim-2.19.2.zip"
-SHA = "75d952874a5d5d1bd13a567fd0a57dfab0d01640f3a1009eca32b0fdccca151d"
-BUILD_ID = "3bwm0uPswTiihzBXV5tBC"
+SHA = "315f7cb2c9401f242eceee9fe9a820e8ca8169105d14c12b8f26a73f7383d115"
+BUILD_ID = "j1Pq4VCs3eH2uM1Zlv3kp"
 CREDS = "/home/z/my-project/scripts/.cp-creds"
 JAR = "/tmp/cp-2192.jar"
 HDR = "/tmp/cp-2192-hdr.txt"
