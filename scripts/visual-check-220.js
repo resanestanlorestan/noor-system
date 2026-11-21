@@ -7,7 +7,7 @@
 const { chromium } = require("playwright");
 const fs = require("node:fs");
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.VC_BASE || "http://localhost:3000";
 const OUT = "/home/z/my-project/download/verify-220";
 const EMAIL = "admin@noor.local";
 const PASS = "NoorAdmin2026!x";

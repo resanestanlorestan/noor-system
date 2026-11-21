@@ -7,8 +7,8 @@
 # مایگریشن ندارد — الحاقیهٔ ۲.۲۰.۰ فقط CSS/رنگ است.
 # RS_STUB: همان الگوی rst2190/2194 — کشتن next-server با cwd */noor-system.
 
-SHA = "c0453d1179018b67da3309b7afd4e2ee6e7e51adc65c43a9649ef98051db3707"
-BUILD_ID = "OJBssnV6dMC0AuESoM5s751"
+SHA = "5d64ad5487bd9950e3c735941585d347ce3af8357914da0319da5fd638a416ae"
+BUILD_ID = "_qET3uPiNrxNblaucjD29"
 VERSION = "2.20.0"
 
 EX_STUB = f"""<?php
