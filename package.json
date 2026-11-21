@@ -1,6 +1,6 @@
 {
   "name": "nextjs-postgresql-template",
-  "version": "2.19.3",
+  "version": "2.19.4",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -40,6 +40,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "drizzle-kit": "0.31.10",
+    "embedded-postgres": "^18.7.0-beta.19",
     "eslint": "9.39.4",
     "eslint-config-next": "^16.4.3",
     "postcss": "^8.5.32",

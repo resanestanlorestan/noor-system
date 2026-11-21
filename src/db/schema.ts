@@ -396,6 +396,7 @@ export const educationRecords = pgTable("education_records", {
   type: educationTypeEnum("type").notNull(),
   level: varchar("level", { length: 60 }).notNull(),
   field: varchar("field", { length: 120 }),
+  universityType: varchar("university_type", { length: 60 }),
   centerName: varchar("center_name", { length: 180 }),
   certificate: varchar("certificate", { length: 180 }),
   documentId: uuid("document_id").references(() => documents.id),

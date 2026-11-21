@@ -12,7 +12,7 @@ import { AlertTriangle, Check, LoaderCircle, Plus, Save, Trash2 } from "lucide-r
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
 import { initialActionState, type ActionState } from "@/lib/action-state";
 import { isoToJalali } from "@/lib/format";
-import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType } from "@/lib/constants";
+import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions, recitationLevelOptions, specialtyDetailSpec, UNIVERSITY_DEGREE_LEVELS, UNIVERSITY_FIELD_SUGGESTIONS, UNIVERSITY_TYPE_OPTIONS, writingTypeLabels, type EducationType } from "@/lib/constants";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
 import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal";
 import { SectionUpload, type DocSlot } from "@/components/doc-upload";
@@ -80,7 +80,7 @@ function ChangeReasonField({ required }: { required: boolean }) {
 
 /* --------------------------- مرحلهٔ ۱ — هویتی --------------------------- */
 
-export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason, flagSections }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean; flagSections?: string[] }) {
+export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason, flagSections }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; universityField?: string; universityType?: string; universityCenterName?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean; flagSections?: string[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveIdentityStepAction, initialActionState);
   const [values, setValues] = useState<IdentityValues>(() => ({
     firstName: defaults?.firstName || "", lastName: defaults?.lastName || "", fatherName: defaults?.fatherName || "", nationalId: "",
@@ -93,8 +93,14 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
   const [seminaryLevel, setSeminaryLevel] = useState(defaults?.seminaryLevel || "");
   const [universitySlot, setUniversitySlot] = useState<DocSlot[]>([]);
   const [seminarySlot, setSeminarySlot] = useState<DocSlot[]>([]);
+  // الحاقیهٔ ۲.۱۹.۴ — رشته تحصیلی / نوع دانشگاه / نام دانشگاه برای مقاطع کاردانی تا
+  // فوق دکتری؛ ترتیب نمایش: مقطع ← رشته ← نوع ← نام (نام فقط پس از انتخاب نوع).
+  const [universityField, setUniversityField] = useState(defaults?.universityField || "");
+  const [universityType, setUniversityType] = useState(defaults?.universityType || "");
+  const [universityCenterName, setUniversityCenterName] = useState(defaults?.universityCenterName || "");
+  const degreeLevel = (UNIVERSITY_DEGREE_LEVELS as readonly string[]).includes(universityLevel);
   const educationPayload = [
-    universityLevel ? { type: "university", level: universityLevel, field: "", centerName: "", certificate: "", docKey: universitySlot[0]?.key || "" } : null,
+    universityLevel ? { type: "university", level: universityLevel, field: degreeLevel ? universityField : "", universityType: degreeLevel ? universityType : "", centerName: degreeLevel ? universityCenterName : "", certificate: "", docKey: universitySlot[0]?.key || "" } : null,
     seminaryLevel ? { type: "seminary", level: seminaryLevel, field: "", centerName: "", certificate: "", docKey: seminarySlot[0]?.key || "" } : null,
   ].filter(Boolean);
   const educationDocsPayload: Array<DocSlot & { section: string }> = [
@@ -139,6 +145,9 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
           <h3 className="form-subhead">تحصیلات دانشگاهی</h3>
           <div className="memorizer-block">
             <label>مقطع تحصیلی<select data-selected-value={universityLevel} value={universityLevel} onChange={(event) => setUniversityLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.university.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
+            {degreeLevel && <label>رشته تحصیلی<input name="universityField" maxLength={120} placeholder="نام رشته تحصیلی" value={universityField} onChange={(event) => setUniversityField(event.target.value)} list="university-field-options" /><small>می‌توانید تایپ کنید یا از پیشنهادها انتخاب کنید.</small><datalist id="university-field-options">{UNIVERSITY_FIELD_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist></label>}
+            {degreeLevel && <label>نوع دانشگاه<select name="universityType" data-selected-value={universityType} value={universityType} onChange={(event) => { setUniversityType(event.target.value); if (!event.target.value) setUniversityCenterName(""); }}><option value="">انتخاب کنید (اختیاری)</option>{UNIVERSITY_TYPE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
+            {degreeLevel && universityType && <label>نام دانشگاه<input name="universityCenterName" maxLength={180} placeholder="نام دقیق دانشگاه / واحد / مرکز" value={universityCenterName} onChange={(event) => setUniversityCenterName(event.target.value)} /></label>}
             <SectionUpload section="university" slots={universitySlot} onChange={setUniversitySlot} label="بارگذاری مدرک تحصیلی دانشگاهی" />
             {defaults?.universityDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.universityDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
           </div>

@@ -187,7 +187,7 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
             const [previous] = await tx.select({ documentId: educationRecords.documentId }).from(educationRecords).where(and(eq(educationRecords.activistId, existing.activist.id), eq(educationRecords.type, row.type))).limit(1);
             await tx.delete(educationRecords).where(and(eq(educationRecords.activistId, existing.activist.id), eq(educationRecords.type, row.type)));
             await tx.insert(educationRecords).values({
-              type: row.type, level: row.level, field: row.field, centerName: row.centerName, certificate: row.certificate,
+              type: row.type, level: row.level, field: row.field, universityType: row.universityType, centerName: row.centerName, certificate: row.certificate,
               activistId: existing.activist.id,
               documentId: row.docKey ? docIdByKey.get(row.docKey) ?? null : previous?.documentId ?? null,
               createdBy: user.id,
@@ -276,7 +276,7 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
         }
         for (const row of educationRows) {
           await tx.insert(educationRecords).values({
-            type: row.type, level: row.level, field: row.field, centerName: row.centerName, certificate: row.certificate,
+            type: row.type, level: row.level, field: row.field, universityType: row.universityType, centerName: row.centerName, certificate: row.certificate,
             activistId: person.id,
             documentId: row.docKey ? docIdByKey.get(row.docKey) ?? null : null,
             createdBy: user.id,

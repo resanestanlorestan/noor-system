@@ -6,7 +6,7 @@
 // Server Action endpoint.
 
 import { jalaliToIso, normalizeText } from "@/lib/format";
-import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, normalizeJuzParts, recitationLevelOptions, specialtyDetailSpec, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
+import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, normalizeJuzParts, recitationLevelOptions, specialtyDetailSpec, UNIVERSITY_TYPE_OPTIONS, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
 
 export const field = (data: FormData, key: string, max = 200) => normalizeText(String(data.get(key) || "")).slice(0, max);
 export const numeric = (value: string) => /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
@@ -18,13 +18,13 @@ const text = (value: unknown, max: number) => normalizeText(String(value ?? ""))
  *  fields are trimmed and length-capped. Invalid payload aborts the save.
  *  الحاقیهٔ ۲.۱۴.۰ — docKey اختیاری: کلید فایل بارگذاری‌شدهٔ درون‌بخشی برای مدرک
  *  همان ردیف؛ در اکشن مرحله به سند متصل می‌شود. */
-export function parseEducationInput(data: FormData): Array<{ type: EducationType; level: string; field: string | null; centerName: string | null; certificate: string | null; docKey: string | null }> {
+export function parseEducationInput(data: FormData): Array<{ type: EducationType; level: string; field: string | null; universityType: string | null; centerName: string | null; certificate: string | null; docKey: string | null }> {
   const raw = String(data.get("educationRecords") || "").slice(0, 20000);
   if (!raw) return [];
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error("invalid-education-json"); }
   if (!Array.isArray(parsed)) throw new Error("invalid-education-json");
-  const rows: Array<{ type: EducationType; level: string; field: string | null; centerName: string | null; certificate: string | null; docKey: string | null }> = [];
+  const rows: Array<{ type: EducationType; level: string; field: string | null; universityType: string | null; centerName: string | null; certificate: string | null; docKey: string | null }> = [];
   for (const item of parsed.slice(0, 30)) {
     if (typeof item !== "object" || item === null) throw new Error("invalid-education-json");
     const record = item as Record<string, unknown>;
@@ -35,9 +35,13 @@ export function parseEducationInput(data: FormData): Array<{ type: EducationType
     if (!type && !level) continue;
     if (!(type in educationTypeLabels) || !level) throw new Error("invalid-education-json");
     if (!(educationLevelOptions[type as EducationType] as readonly string[]).includes(level)) throw new Error("invalid-education-json");
+    // الحاقیهٔ ۲.۱۹.۴ — نوع دانشگاه فقط یکی از گزینه‌های ثابت یا خالی است
+    const universityTypeRaw = normalizeText(String(record.universityType || "")).slice(0, 60);
+    if (universityTypeRaw && !(UNIVERSITY_TYPE_OPTIONS as readonly string[]).includes(universityTypeRaw)) throw new Error("invalid-education-json");
     rows.push({
       type: type as EducationType, level,
       field: normalizeText(String(record.field || "")).slice(0, 120) || null,
+      universityType: universityTypeRaw || null,
       centerName: normalizeText(String(record.centerName || "")).slice(0, 180) || null,
       certificate: normalizeText(String(record.certificate || "")).slice(0, 180) || null,
       docKey: text(record.docKey, 60) || null,

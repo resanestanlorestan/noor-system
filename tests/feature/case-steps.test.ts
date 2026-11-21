@@ -229,6 +229,26 @@ describe("قفل مراحل روی سرور — ویزارد واقعی", () => 
     expect(photo.error).toContain("سکونت و محل فعالیت");
   });
 
+  it("الحاقیهٔ ۲.۱۹.۴ — رشته/نوع/نام دانشگاه ذخیره می‌شود و نوع نامعتبر رد می‌شود", async () => {
+    const edu = JSON.stringify([{ type: "university", level: "کارشناسی", field: "علوم قرآن و حدیث", universityType: "دانشگاه آزاد اسلامی", centerName: "واحد تهران مرکز", certificate: "", docKey: "" }]);
+    await loginAs("act");
+    const url = await redirectOf(() => saveIdentityStepAction({}, completeProfile(f, { educationRecords: edu })));
+    expect(url).toMatch(/^\/cases\/[\w-]+\/steps\/2$/);
+    const [row] = await db.select().from(s.educationRecords).where(eq(s.educationRecords.centerName, "واحد تهران مرکز"));
+    expect(row?.level).toBe("کارشناسی");
+    expect(row?.field).toBe("علوم قرآن و حدیث");
+    expect(row?.universityType).toBe("دانشگاه آزاد اسلامی");
+    expect(row?.centerName).toBe("واحد تهران مرکز");
+  });
+
+  it("الحاقیهٔ ۲.۱۹.۴ — نوع دانشگاه خارج از فهرست ثابت از سمت سرور رد می‌شود", async () => {
+    await loginAs("act");
+    const bad = await saveIdentityStepAction({}, completeProfile(f, {
+      educationRecords: JSON.stringify([{ type: "university", level: "کارشناسی", universityType: "دانشگاه ناموجود" }]),
+    }));
+    expect(bad.error).toContain("تحصیلات");
+  });
+
   it("خطای اعتبارسنجی مرحلهٔ ۲ عبور نمی‌دهد؛ ذخیرهٔ موفق به مرحلهٔ ۳ می‌رود", async () => {
     const caseId = await freshCase();
     const bad = await saveLocationStepAction({}, form({ caseId }));
