@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ورود به cPanel و اجرای یک دستور در ترمینال وب — اعتبارنامه از cpread.sh خوانده می‌شود.
+"""ورود به cPanel و اجرای یک دستور در ترمینال وب — اعتبارنامه از .cp-creds خوانده می‌شود.
 usage: cp-term.py <command> [wait_seconds]"""
 import http.cookiejar as cj
 import json, os, re, ssl, subprocess, sys, time
@@ -10,7 +10,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def cpval(name):
-    text = open(os.path.join(SCRIPT_DIR, "cpread.sh")).read()
+    text = open(os.path.join(SCRIPT_DIR, ".cp-creds")).read()
     return re.search(rf"CP_{name}='([^']*)'", text).group(1)
 
 
