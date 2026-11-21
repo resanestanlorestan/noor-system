@@ -20,7 +20,8 @@ import { addWritingAction, deleteWritingAction } from "@/app/actions/records";
 import { explainDocumentRequestAction } from "@/app/actions/workflow";
 import { StatusBadge } from "@/components/case-table";
 import { ConfirmButton, DocumentUpload, PhotoRemove, PhotoUpload } from "@/components/case-controls";
-import { ActivityRecordsSection, CertificatesSection, EducationalCoursesSection, EducationRecordsSection, OrganizationLinksSection, WorkHistorySection } from "@/components/activity-records";
+import { ActivityRecordsSection, CertificatesSection, EducationalCoursesSection, OrganizationLinksSection, WorkHistorySection } from "@/components/activity-records";
+import { EducationRecordsSection } from "@/components/education-records";
 import { WorkflowSections, WorkflowSide, ExpertNotesSection } from "@/components/workflow-panels";
 
 const EDITABLE_DETAIL_STATUSES = ["draft", "completing", "needs_correction"] as const;
