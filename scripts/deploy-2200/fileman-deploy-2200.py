@@ -10,8 +10,8 @@ import base64, json, os, re, subprocess, sys, time, secrets
 
 CREDS = "/home/z/my-project/scripts/.cp-creds"
 ZIP = "/home/z/my-project/download/noor-slim-2.20.0.zip"
-SHA = "c0453d1179018b67da3309b7afd4e2ee6e7e51adc65c43a9649ef98051db3707"
-BUILD_ID = "OJBssnV6dMC0AuESoM5s751"
+SHA = "5d64ad5487bd9950e3c735941585d347ce3af8357914da0319da5fd638a416ae"
+BUILD_ID = "_qET3uPiNrxNblaucjD29"
 VERSION = "2.20.0"
 DEPLOY_SRC = "/home/z/my-project/scripts/deploy-2200/deploy-2200.py"
 JAR = "/tmp/cp-2200.jar"
@@ -147,8 +147,8 @@ if ver != VERSION:
 leftovers = ["noor-slim-2.19.2.zip", "noor-slim-2.19.3.zip", "noor-slim-2.19.4.zip",
              "rc2192.php", "rc2194.php", "ex2192.php", "ex2194b.php", "mg2194.php",
              "rst2194.php", "ex2200.php", "rst2200.php", ".up2192.json", ".up2194.json", ".up2200.json"]
-leftovers += [f"noor-part-{seq:02d}.b64.txt" for seq in range(1, 20)]
-leftovers += [f"noor-part-{seq:02d}.bin" for seq in range(1, 20)]
+leftovers += [f"noor-part-{seq:02d}.b64.txt" for seq in range(1, 40)]
+leftovers += [f"noor-part-{seq:02d}.bin" for seq in range(1, 40)]
 for name in leftovers:
     delete_file(name, HOME)
     time.sleep(0.6)
