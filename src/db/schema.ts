@@ -156,6 +156,23 @@ export const formAnswers = pgTable("form_answers", {
   index("form_answers_definition_idx").on(table.definitionId),
   index("form_answers_specialty_idx").on(table.specialtyId),
 ]);
+// الحاقیهٔ ۲.۲۵.۰ — تعریف پویای مراحل ثبت پرونده: مراحل پایهٔ سامانه با
+// مایگریشن ۰۰۳۱ seed می‌شوند (kind='system', required) و مراحل سفارشی مدیر از
+// UI افزوده می‌شوند؛ ترتیب، عنوان، توضیح و فعال/غیرفعال بودن هر مرحله از همین
+// جدول خوانده می‌شود. فیلدهای سفارشی هر مرحله در form_definitions با
+// entity_type='case_step' و entityId=شناسهٔ همین جدول نگهداری می‌شود.
+export const caseStepDefinitions = pgTable("case_step_definitions", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 40 }).notNull().unique(),
+  title: varchar("title", { length: 120 }).notNull(),
+  description: varchar("description", { length: 500 }),
+  kind: varchar("kind", { length: 10 }).notNull().default("custom").$type<"system" | "custom">(),
+  required: boolean("required").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("case_step_defs_order_idx").on(table.sortOrder, table.id)]);
 export const activists = pgTable("quranic_activists", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").unique().references(() => users.id),

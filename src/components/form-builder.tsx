@@ -18,6 +18,8 @@ type BuilderProps = {
   version: number;
   answersCount: number;
   initialConfig: FormConfig;
+  /** الحاقیهٔ ۲.۲۵.۰ — نوع موجودیت فرم: specialty (پیش‌فرض) یا case_step */
+  entityType?: string;
 };
 
 const typeWithOptions = (type: FormFieldType) => type === "select" || type === "multiselect" || type === "checkbox" || type === "radio";
@@ -30,7 +32,7 @@ function newField(type: FormFieldType): FormField {
   return field;
 }
 
-export function FormBuilder({ specialtyId, specialtyTitle, status, version, answersCount, initialConfig }: BuilderProps) {
+export function FormBuilder({ specialtyId, specialtyTitle, status, version, answersCount, initialConfig, entityType = "specialty" }: BuilderProps) {
   const [fields, setFields] = useState<FormField[]>(() => initialConfig.fields.map((field) => ({ ...field })));
   const [openField, setOpenField] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
@@ -59,7 +61,7 @@ export function FormBuilder({ specialtyId, specialtyTitle, status, version, answ
   const canSave = fields.length > 0;
 
   return <section className="ws-panel detail-section builder-panel">
-    <div className="detail-section-head"><div><span>فرم‌ساز پویا</span><h2>فرم تخصص «{specialtyTitle}»</h2><p>
+    <div className="detail-section-head"><div><span>فرم‌ساز پویا</span><h2>فرم «{specialtyTitle}»</h2><p>
       {status === "none" && "هنوز فرمی ساخته نشده است؛ فیلدها را اضافه و پیش‌نویس را ذخیره کنید."}
       {status === "draft" && "پیش‌نویس ذخیره‌شده دارد؛ تا انتشار، در پرونده‌ها نمایش داده نمی‌شود."}
       {status === "published" && `نسخهٔ منتشرشدهٔ ${version} فعال است${answersCount ? ` و ${answersCount} پاسخ ذخیره شده` : ""}؛ ویرایش‌ها فقط با انتشار نسخهٔ جدید اعمال می‌شوند.`}
@@ -138,25 +140,25 @@ export function FormBuilder({ specialtyId, specialtyTitle, status, version, answ
 
     <div className="builder-actions">
       <form action={draftAction}>
-        <input type="hidden" name="entityType" value="specialty" />
+        <input type="hidden" name="entityType" value={entityType} />
         <input type="hidden" name="entityId" value={specialtyId} />
         <input type="hidden" name="config" value={payload} />
         <button className="secondary-button" disabled={draftPending || !canSave}>{draftPending ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />} ذخیرهٔ پیش‌نویس</button>
       </form>
       <form action={publishAction}>
-        <input type="hidden" name="entityType" value="specialty" />
+        <input type="hidden" name="entityType" value={entityType} />
         <input type="hidden" name="entityId" value={specialtyId} />
         <button className="primary-button" disabled={publishPending || !canSave}>{publishPending ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} انتشار نسخهٔ تازه</button>
       </form>
       <button type="button" className="secondary-button" onClick={() => setPreview(true)} disabled={!canSave}><Eye size={16} /> پیش‌نمایش فرم</button>
       {(status === "published" || status === "disabled") && <form action={disableAction}>
-        <input type="hidden" name="entityType" value="specialty" />
+        <input type="hidden" name="entityType" value={entityType} />
         <input type="hidden" name="entityId" value={specialtyId} />
         <input type="hidden" name="disabled" value={status === "published" ? "1" : "0"} />
         <button className="secondary-button">{status === "published" ? "غیرفعال‌سازی فرم" : "فعال‌سازی مجدد"}</button>
       </form>}
       {status !== "none" && answersCount === 0 && <form action={deleteAction}>
-        <input type="hidden" name="entityType" value="specialty" />
+        <input type="hidden" name="entityType" value={entityType} />
         <input type="hidden" name="entityId" value={specialtyId} />
         <button className="secondary-button row-remove">حذف فرم</button>
       </form>}

@@ -7,7 +7,7 @@ import { activists, applications, counties, provinces, specialties } from "@/db/
 import { requireUser } from "@/lib/auth";
 import { ensureReferenceData, isManager } from "@/lib/data";
 import { can } from "@/lib/permissions";
-import { CASE_STEPS } from "@/lib/case-steps";
+import { loadActiveCaseSteps } from "@/lib/case-steps";
 import { CaseStepsBar } from "@/components/case-progress";
 import { IdentityStepForm } from "@/components/case-steps-forms";
 import { getContent } from "@/lib/site-content";
@@ -21,8 +21,10 @@ export default async function NewCasePage() {
   const sourceOptions = user.effectiveRole === "activist" ? [] : isManager(user)
     ? [{ value: "manager", label: "ثبت توسط مدیر" }, { value: "expert", label: "ثبت توسط کارشناس" }, { value: "paper", label: "ورود از فرم کاغذی" }]
     : [{ value: "expert", label: "ثبت توسط کارشناس" }, { value: "paper", label: "ورود از فرم کاغذی" }];
-  const steps = CASE_STEPS.map((step, index) => ({ key: step.key, index, title: step.title, hint: step.hint, status: index === 0 ? "incomplete" as const : "locked" as const, missing: [] }));
-  return <><div className="ws-breadcrumb"><Link href="/cases">پرونده‌ها</Link><span> / </span><b>ثبت پرونده جدید</b></div><div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پرونده الکترونیکی</div><h1>{content.text("pages.cases_new.title")}</h1><p>{content.text("pages.cases_new.sub")}</p></div><Link href="/cases" className="secondary-button"><ArrowRight size={16} /> بازگشت به فهرست</Link></div><CaseStepsBar steps={steps} caseId="new" completedCount={0} totalCount={CASE_STEPS.length} entryHref="/cases/new" /><section className="ws-panel form-panel">
+  // الحاقیهٔ ۲.۲۵.۰ — نوار مراحل صفحهٔ «پروندهٔ جدید» از ترتیب فعال DB می‌آید
+  const ordered = await loadActiveCaseSteps();
+  const steps = ordered.map((step, index) => ({ key: step.key, index, title: step.title, hint: step.hint, status: index === 0 ? "incomplete" as const : "locked" as const, missing: [] }));
+  return <><div className="ws-breadcrumb"><Link href="/cases">پرونده‌ها</Link><span> / </span><b>ثبت پرونده جدید</b></div><div className="ws-page-head"><div><div className="ws-eyebrow"><span /> پرونده الکترونیکی</div><h1>{content.text("pages.cases_new.title")}</h1><p>{content.text("pages.cases_new.sub")}</p></div><Link href="/cases" className="secondary-button"><ArrowRight size={16} /> بازگشت به فهرست</Link></div><CaseStepsBar steps={steps} caseId="new" completedCount={0} totalCount={steps.length} entryHref="/cases/new" /><section className="ws-panel form-panel">
     {/* الحاقیهٔ ۲.۱۴.۰ — پیش‌پرکردن نام و موبایل از حساب کاربری؛ پیوند حساب ↔ پرونده با شناسهٔ کاربر حفظ می‌شود */}
     <IdentityStepForm sourceOptions={sourceOptions} defaults={{ firstName: user.firstName || "", lastName: user.lastName || "", phone: user.phone || "" }} />
   </section></>;

@@ -41,6 +41,8 @@ export function WorkspaceShell({ name, role, customRoleLabel, permissions, today
     { href: "/permissions", label: "نقش‌ها و مجوزها", icon: ShieldCheck, allowed: allowed("permissions.manage") },
     { href: "/settings", label: "تقسیمات جغرافیایی", icon: MapPinned, allowed: allowed("settings.geo") || allowed("settings.references") },
     { href: "/forms", label: "فرم‌ساز پویا", icon: ClipboardList, allowed: allowed("forms.manage") },
+    // الحاقیهٔ ۲.۲۵.۰ — مدیریت پویای مراحل ثبت پرونده با همان گارد فرم‌ساز
+    { href: "/steps", label: "مراحل ثبت پرونده", icon: ListChecks, allowed: allowed("forms.manage") },
     { href: "/audit", label: "رویدادهای حساس", icon: History, allowed: allowed("audit.view") },
     { href: "/outbox", label: "صندوق پیام‌ها", icon: Inbox, allowed: allowed("outbox.view") },
     // الحاقیهٔ ۲.۱۵.۰ — مدیریت API فقط برای مدیر ارشد در منو دیده می‌شود

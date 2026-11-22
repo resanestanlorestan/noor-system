@@ -54,7 +54,7 @@ export async function createSpecialtyAction(_state: ActionState, data: FormData)
   try {
     const [created] = await db.insert(specialties).values({ code, title, description: description || null, sortOrder: (last?.max || 0) + 1 }).returning({ id: specialties.id });
     await audit(guard.user.id, "add_specialty", "specialty", String(created.id), title);
-    revalidatePath("/forms"); revalidatePath("/settings");
+    revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings");
     return { success: `تخصص «${title}» افزوده شد.` };
   } catch {
     return { error: "ثبت تخصص انجام نشد؛ دوباره تلاش کنید." };
@@ -72,7 +72,7 @@ export async function saveSpecialtyMetaAction(_state: ActionState, data: FormDat
   try {
     await db.update(specialties).set({ title, description: description || null }).where(eq(specialties.id, id));
     await audit(guard.user.id, "specialty_meta_edit", "specialty", String(id), title);
-    revalidatePath("/forms"); revalidatePath("/settings"); revalidatePath("/cases");
+    revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings"); revalidatePath("/cases");
     return { success: "تخصص به‌روزرسانی شد." };
   } catch {
     return { error: "به‌روزرسانی تخصص انجام نشد." };
@@ -89,7 +89,7 @@ export async function toggleSpecialtyAction(data: FormData): Promise<ActionState
   try {
     await db.update(specialties).set({ active }).where(eq(specialties.id, id));
     await audit(guard.user.id, "specialty_toggle", "specialty", String(id), active ? "فعال" : "غیرفعال");
-    revalidatePath("/forms"); revalidatePath("/settings");
+    revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings");
     return { success: active ? "تخصص فعال شد." : "تخصص غیرفعال شد؛ پرونده‌های پیشین دست‌نخورده‌اند." };
   } catch {
     return { error: "تغییر وضعیت تخصص انجام نشد." };
@@ -115,7 +115,7 @@ export async function reorderSpecialtiesAction(data: FormData): Promise<ActionSt
       }
     });
     await audit(guard.user.id, "specialty_reorder", "specialty", ids.join(","));
-    revalidatePath("/forms"); revalidatePath("/settings");
+    revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings");
     return { success: "ترتیب تخصص‌ها ذخیره شد." };
   } catch {
     return { error: "ذخیرهٔ ترتیب انجام نشد." };
@@ -140,7 +140,7 @@ export async function deleteSpecialtyAction(data: FormData) {
   try { await db.delete(specialties).where(eq(specialties.id, id)); }
   catch { return fail("حذف تخصص انجام نشد؛ دوباره تلاش کنید."); }
   await audit(guard.user.id, "delete_specialty", "specialty", String(id), specialty.title);
-  revalidatePath("/forms"); revalidatePath("/settings"); revalidatePath("/cases"); revalidatePath("/register");
+  revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings"); revalidatePath("/cases"); revalidatePath("/register");
   return redirect("/forms?m=" + stashFlash(`تخصص «${specialty.title}» از فهرست حذف شد.`));
 }
 
@@ -165,12 +165,12 @@ export async function saveFormDraftAction(_state: ActionState, data: FormData): 
   if (!existing) {
     await db.insert(formDefinitions).values({ entityType, entityId, status: "draft", version: 0, draftConfig: config, updatedBy: guard.user.id });
     await audit(guard.user.id, "form_draft_save", "form_definition", `${entityType}:${entityId}`);
-    revalidatePath("/forms");
+    revalidatePath("/forms"); revalidatePath("/steps");
     return { success: "پیش‌نویس فرم ذخیره شد." };
   }
   await db.update(formDefinitions).set({ draftConfig: config, updatedBy: guard.user.id, updatedAt: new Date() }).where(eq(formDefinitions.id, existing.id));
   await audit(guard.user.id, "form_draft_save", "form_definition", `${entityType}:${entityId}`);
-  revalidatePath("/forms");
+  revalidatePath("/forms"); revalidatePath("/steps");
   return { success: "پیش‌نویس فرم ذخیره شد." };
 }
 
@@ -193,7 +193,7 @@ export async function publishFormAction(_state: ActionState, data: FormData): Pr
       await tx.update(formDefinitions).set({ status: "published", version: nextVersion, publishedConfig: result.config, draftConfig: result.config, updatedBy: guard.user.id, updatedAt: new Date() }).where(eq(formDefinitions.id, existing.id));
     });
     await audit(guard.user.id, "form_publish", "form_definition", `${entityType}:${entityId}`, `نسخهٔ ${nextVersion} با ${result.config.fields.length} فیلد`);
-    revalidatePath("/forms");
+    revalidatePath("/forms"); revalidatePath("/steps");
     return { success: `نسخهٔ ${faNumber(nextVersion)} فرم منتشر شد و برای پرونده‌ها فعال است.` };
   } catch {
     return { error: "انتشار فرم انجام نشد؛ دوباره تلاش کنید." };
@@ -213,7 +213,7 @@ export async function setFormDisabledAction(data: FormData): Promise<ActionState
   try {
     await db.update(formDefinitions).set({ status: disabled ? "disabled" : "published", updatedBy: guard.user.id, updatedAt: new Date() }).where(eq(formDefinitions.id, existing.id));
     await audit(guard.user.id, disabled ? "form_disable" : "form_enable", "form_definition", `${entityType}:${entityId}`);
-    revalidatePath("/forms");
+    revalidatePath("/forms"); revalidatePath("/steps");
     return { success: disabled ? "فرم غیرفعال شد؛ پاسخ‌های قبلی محفوظ می‌مانند." : "فرم دوباره فعال شد." };
   } catch {
     return { error: "تغییر وضعیت فرم انجام نشد." };
@@ -234,7 +234,7 @@ export async function deleteFormAction(data: FormData): Promise<ActionState> {
   try {
     await db.delete(formDefinitions).where(eq(formDefinitions.id, existing.id));
     await audit(guard.user.id, "form_delete", "form_definition", `${entityType}:${entityId}`);
-    revalidatePath("/forms");
+    revalidatePath("/forms"); revalidatePath("/steps");
     return { success: "فرم حذف شد." };
   } catch {
     return { error: "حذف فرم انجام نشد." };

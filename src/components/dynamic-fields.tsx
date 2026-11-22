@@ -10,8 +10,10 @@ import { formFileMimeHints, isFieldVisible, type FormAnswers, type FormConfig, t
 
 export type DynValues = Record<string, string | string[]>;
 
-/** ورودی فایل فیلد پویا: آپلود بلافاصله، بازگشت شناسهٔ مدرک به والد */
-function FormFileInput({ applicationId, specialtyId, field, value, onChange, disabled }: { applicationId: string; specialtyId: number; field: FormField; value?: string; onChange: (documentId: string) => void; disabled?: boolean }) {
+/** ورودی فایل فیلد پویا: آپلود بلافاصله، بازگشت شناسهٔ مدرک به والد.
+ *  الحاقیهٔ ۲.۲۵.۰ — entityType: specialty (پیش‌فرض) یا case_step برای فیلدهای
+ *  سفارشی مراحل ثبت پرونده. */
+function FormFileInput({ applicationId, specialtyId, field, value, onChange, disabled, entityType = "specialty" }: { applicationId: string; specialtyId: number; field: FormField; value?: string; onChange: (documentId: string) => void; disabled?: boolean; entityType?: string }) {
   const [state, action, pending] = useActionState(uploadFormFileAction.bind(null, applicationId), initialActionState);
   useEffect(() => {
     if (state.data?.documentId) onChange(state.data.documentId);
@@ -21,6 +23,7 @@ function FormFileInput({ applicationId, specialtyId, field, value, onChange, dis
   return <div className="dyn-file-box">
     <form action={action}>
       <input type="hidden" name="specialtyId" value={specialtyId} />
+      <input type="hidden" name="entityType" value={entityType} />
       <input type="hidden" name="fieldKey" value={field.key} />
       <input type="file" name="file" accept={rule?.accept === "audio" ? "audio/*" : rule?.accept === "image" ? "image/*" : rule?.accept === "pdf" ? "application/pdf" : undefined} disabled={disabled || pending} onChange={(event) => { if (event.target.form && (event.target.files as FileList)?.length) event.target.form.requestSubmit(); }} />
       {pending && <button type="submit" className="primary-button" disabled><LoaderCircle className="spin" size={16} /> در حال بارگذاری…</button>}
@@ -32,14 +35,17 @@ function FormFileInput({ applicationId, specialtyId, field, value, onChange, dis
   </div>;
 }
 
-export function DynamicFieldsRenderer({ config, applicationId, specialtyId, values, onValueChange, disabled }: { config: FormConfig; applicationId?: string; specialtyId: number; values: DynValues; onValueChange?: (fieldKey: string, value: string | string[]) => void; disabled?: boolean }) {
+/** رندر فیلدهای فرم پویا با نمایش شرطی؛ الحاقیهٔ ۲.۲۵.۰ — prefix: پیشوند نام
+ *  ورودی‌ها (dyn برای فرم تخصص‌ها، cstep برای فیلدهای سفارشی مراحل ثبت پرونده)
+ *  و entityType برای مسیر آپلود فایل همان فرم. */
+export function DynamicFieldsRenderer({ config, applicationId, specialtyId, values, onValueChange, disabled, prefix = "dyn", entityType = "specialty" }: { config: FormConfig; applicationId?: string; specialtyId: number; values: DynValues; onValueChange?: (fieldKey: string, value: string | string[]) => void; disabled?: boolean; prefix?: string; entityType?: string }) {
   const [modalOpen, setModalOpen] = useState<string | null>(null);
   const set = (key: string, value: string | string[]) => onValueChange?.(key, value);
   const visible = config.fields.filter((field) => isFieldVisible(field, values as FormAnswers));
   if (!config.fields.length) return <p className="inline-empty">این فرم هنوز فیلدی ندارد.</p>;
   return <div className="dyn-fields">
     {visible.map((field) => {
-      const name = `dyn__${specialtyId}__${field.key}`;
+      const name = `${prefix}__${specialtyId}__${field.key}`;
       const value = values[field.key];
       const requiredMark = field.required ? <i>*</i> : null;
       return <div className="dyn-field" key={field.key}>
@@ -51,7 +57,7 @@ export function DynamicFieldsRenderer({ config, applicationId, specialtyId, valu
             <p>{field.modal?.body}</p>
           </div>}
         </div>
-          : field.type === "file" ? <label className="dyn-label">مدرک / فایل: {field.label} {requiredMark}<FormFileInput applicationId={applicationId || ""} specialtyId={specialtyId} field={field} value={typeof value === "string" ? value : undefined} onChange={(documentId) => set(field.key, documentId)} disabled={disabled} /></label>
+          : field.type === "file" ? <label className="dyn-label">مدرک / فایل: {field.label} {requiredMark}<FormFileInput applicationId={applicationId || ""} specialtyId={specialtyId} entityType={entityType} field={field} value={typeof value === "string" ? value : undefined} onChange={(documentId) => set(field.key, documentId)} disabled={disabled} /></label>
             : field.type === "checkbox" ? <div className="dyn-label">تک‌به‌تک انتخاب کنید: {field.label} {requiredMark}
               <div className="check-list">{(field.options || []).map((option) => <label key={option.key} className={Array.isArray(value) && value.includes(option.key) ? "checked" : ""}>
                 <input type="checkbox" name={name} value={option.key} checked={Array.isArray(value) && value.includes(option.key)} disabled={disabled} onChange={(event) => {

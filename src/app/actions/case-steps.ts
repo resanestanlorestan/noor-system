@@ -9,7 +9,7 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, activists, applicationVersions, applications, auditLogs, counties, documents, educationRecords, educationalCourses, formAnswers, formDefinitions, provinces, specialties, statusHistory, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, activists, applicationVersions, applications, auditLogs, caseStepDefinitions, counties, documents, educationRecords, educationalCourses, formAnswers, formDefinitions, provinces, specialties, statusHistory, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getCaseForUser, isManager, scopeCondition } from "@/lib/data";
 import { can } from "@/lib/permissions";
@@ -20,8 +20,9 @@ import { field, numeric, parseActivityRecordsInput, parseCoursesInput, parseEduc
 import { privateDir } from "@/lib/local-secrets";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { CASE_STEPS, computeCaseSteps, loadCaseStepFacts, stepGateError, type CaseStepKey } from "@/lib/case-steps";
+import { CASE_STEPS, computeCaseSteps, loadActiveCaseSteps, loadCaseStepFacts, stepGateError, type CaseStepKey } from "@/lib/case-steps";
 import type { ActionState, DuplicateHint } from "@/lib/action-state";
+import { stashFlash } from "@/lib/flash";
 import { validateFormAnswers, type FormAnswers, type FormConfig } from "@/lib/form-config";
 
 const EDITABLE_STATUSES = ["draft", "completing", "needs_correction"] as const;
@@ -30,7 +31,9 @@ type EditableStatus = (typeof EDITABLE_STATUSES)[number];
 const refresh = (id: string) => {
   revalidatePath("/dashboard"); revalidatePath("/cases");
   revalidatePath(`/cases/${id}`);
-  for (let step = 1; step <= CASE_STEPS.length; step++) revalidatePath(`/cases/${id}/steps/${step}`);
+  // الحاقیهٔ ۲.۲۵.۰ — تعداد مراحل پویاست (تعریف DB)؛ بازهٔ ۱ تا ۱۶ سوپرستِ
+  // امن است و revalidatePath روی مسیرهای ناموجود بی‌ضرر.
+  for (let step = 1; step <= 16; step++) revalidatePath(`/cases/${id}/steps/${step}`);
 };
 
 /** Shared prologue: session, editable case, permission and the server-side
@@ -41,12 +44,14 @@ async function stepContext(caseId: string, stepKey: CaseStepKey) {
   if (!row) return { user, error: "پرونده پیدا نشد یا مجوز دسترسی ندارید." } as const;
   if (!EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) return { user, error: "این پرونده در وضعیت قابل ویرایش نیست." } as const;
   if (!(await can(user, "cases.edit"))) return { user, error: "اجازه ویرایش اطلاعات پرونده را ندارید." } as const;
-  const stepIndex = CASE_STEPS.findIndex((step) => step.key === stepKey);
+  // الحاقیهٔ ۲.۲۵.۰ — شماره، عنوان و گارد مرحله از ترتیب فعال DB می‌آید
   const facts = await loadCaseStepFacts(row.activist, row.application.status, row.application.id);
   const plan = computeCaseSteps(facts);
-  const gate = stepGateError(plan, stepIndex, CASE_STEPS[stepIndex].title);
+  const stepIndex = plan.steps.findIndex((step) => step.key === stepKey);
+  if (stepIndex === -1) return { user, error: "این مرحله در زنجیرهٔ فعال ثبت پرونده یافت نشد." } as const;
+  const gate = stepGateError(plan, stepIndex, plan.steps[stepIndex].title);
   if (gate) return { user, error: gate } as const;
-  return { user, row, stepIndex } as const;
+  return { user, row, stepIndex, stepNumber: stepIndex + 1, stepTitle: plan.steps[stepIndex].title } as const;
 }
 
 /** Applies one partial profile update inside a locked transaction with the
@@ -152,6 +157,10 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
   const universityDoc = identityDocs.find((doc) => doc.section === "university");
   const seminaryDoc = identityDocs.find((doc) => doc.section === "seminary");
   const identityHasEducation = Boolean(educationRows.length || identityDocs.length);
+  // الحاقیهٔ ۲.۲۵.۰ — مرحلهٔ بعدی پس از ذخیره از ترتیب فعال DB می‌آید
+  const orderedSteps = await loadActiveCaseSteps();
+  const identityNumber = Math.max(orderedSteps.findIndex((step) => step.key === "identity") + 1, 1);
+  const identityTitle = orderedSteps.find((step) => step.key === "identity")?.title || CASE_STEPS[0].title;
 
   if (existing) {
     try {
@@ -160,7 +169,7 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
         ...(protectedId ? { nationalIdCipher: protectedId.cipher, nationalIdHash: protectedId.hash, nationalIdLast4: protectedId.last4 } : {}),
         birthDate, gender, phone, alternatePhone, email: email || null,
         idCardNumber: idCard || null, idIssuePlace: idIssue || null,
-      }, CASE_STEPS[0].title, existing.application.status === "draft" ? "completing" : null);
+      }, identityTitle, existing.application.status === "draft" ? "completing" : null);
     } catch {
       return { error: "ذخیرهٔ مرحلهٔ هویتی انجام نشد؛ وضعیت پرونده را دوباره بررسی کنید." };
     }
@@ -207,7 +216,7 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
       }
     }
     refresh(existing.application.id);
-    redirect(`/cases/${existing.application.id}/steps/2`);
+    redirect(`/cases/${existing.application.id}/steps/${identityNumber + 1}`);
   }
 
   // ایجاد پیش‌نویس جدید با اطلاعات هویتی — هشدار تکراری بودن پیش از هر نوشتن
@@ -303,7 +312,7 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
     return { error: "ذخیرهٔ مرحلهٔ هویتی انجام نشد؛ دوباره تلاش کنید." };
   }
   refresh(resultId);
-  redirect(`/cases/${resultId}/steps/2`);
+  redirect(`/cases/${resultId}/steps/${identityNumber + 1}`);
 }
 
 /* ---------------------- مرحلهٔ ۲ — سکونت و فعالیت ---------------------- */
@@ -339,12 +348,12 @@ export async function saveLocationStepAction(_state: ActionState, data: FormData
       activityProvinceId, activityCountyId,
       activityPlace: field(data, "activityPlace", 180) || null,
       organization: field(data, "organization", 180) || null,
-    }, CASE_STEPS[1].title, null);
+    }, context.stepTitle, null);
   } catch {
     return { error: "ذخیرهٔ مرحلهٔ سکونت و فعالیت انجام نشد؛ دوباره تلاش کنید." };
   }
   refresh(row.application.id);
-  redirect(`/cases/${row.application.id}/steps/3`);
+  redirect(`/cases/${row.application.id}/steps/${context.stepNumber + 1}`);
 }
 
 /* -------------- مرحلهٔ ۳ — تخصص‌ها، تحصیلات و سوابق -------------- */
@@ -462,7 +471,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
         tx.select({ workType: activistWritings.workType, title: activistWritings.title, topic: activistWritings.topic }).from(activistWritings).where(eq(activistWritings.activistId, row.activist.id)),
         tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, row.application.id)),
       ]);
-      await tx.insert(applicationVersions).values({ applicationId: row.application.id, version: Number(next[0].value), snapshot: { profile: previous, specialties: oldSpecialties, specialtyDetails: oldDetails, writings: oldWritings, status: locked.status }, reason: `ذخیرهٔ مرحلهٔ «${CASE_STEPS[2].title}» ویزارد ثبت`, createdBy: user.id });
+      await tx.insert(applicationVersions).values({ applicationId: row.application.id, version: Number(next[0].value), snapshot: { profile: previous, specialties: oldSpecialties, specialtyDetails: oldDetails, writings: oldWritings, status: locked.status }, reason: `ذخیرهٔ مرحلهٔ «${context.stepTitle}» ویزارد ثبت`, createdBy: user.id });
       await tx.update(activists).set({ job: field(data, "job", 120) || null, notes: field(data, "notes", 4000) || null, updatedAt: new Date() }).where(eq(activists.id, row.activist.id));
       await tx.delete(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id));
       await tx.insert(activistSpecialties).values(chosen.map((specialtyId) => ({ activistId: row.activist.id, specialtyId })));
@@ -523,7 +532,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
         await tx.update(applications).set({ status: nextStatus, updatedAt: new Date() }).where(eq(applications.id, row.application.id));
         await tx.insert(statusHistory).values({ applicationId: row.application.id, fromStatus: locked.status, toStatus: nextStatus, actorId: user.id, note: "ادامه تکمیل اطلاعات" });
       }
-      await tx.insert(auditLogs).values({ actorId: user.id, action: "update_draft", targetType: "application", targetId: row.application.id, detail: `مرحلهٔ ${CASE_STEPS[2].title}` });
+      await tx.insert(auditLogs).values({ actorId: user.id, action: "update_draft", targetType: "application", targetId: row.application.id, detail: `مرحلهٔ ${context.stepTitle}` });
       // الحاقیهٔ ۲.۲۳.۰ — ذخیرهٔ پاسخ‌های فرم پویا؛ نسخهٔ فرم در لحظهٔ ثبت در ردیف
       // می‌ماند تا انتشار نسخه‌های بعدی هرگز پاسخ‌های تاریخی را ناسازگار نکند.
       for (const item of dynToUpsert) {
@@ -535,5 +544,60 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
     return { error: "ذخیرهٔ مرحلهٔ تخصص‌ها و سوابق انجام نشد؛ دوباره تلاش کنید." };
   }
   refresh(row.application.id);
-  redirect(`/cases/${row.application.id}/steps/4`);
+  redirect(`/cases/${row.application.id}/steps/${context.stepNumber + 1}`);
+}
+
+/* ------------- الحاقیهٔ ۲.۲۵.۰ — ذخیرهٔ پاسخ فیلدهای سفارشی یک مرحله ------------- */
+
+/** ذخیرهٔ پاسخ فیلدهای سفارشی یک مرحله: فرمِ اصلی مراحل سفارشی و فیلدهای
+ *  تکمیلیِ مراحل پایه. اعتبارسنجی کامل روی نسخهٔ منتشرشدهٔ فرم سمت سرور انجام
+ *  می‌شود و پاسخ با نسخهٔ همان لحظه ذخیره می‌گردد؛ انتشار نسخهٔ تازه هرگز
+ *  پاسخ‌های تاریخی را تغییر نمی‌دهد. گارد زنجیرهٔ مراحل همین‌جا اعمال است. */
+export async function saveCaseStepAnswersAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const caseId = field(data, "caseId", 40);
+  const definitionId = Number(field(data, "caseStepId", 10));
+  const row = caseId ? await getCaseForUser(user, caseId) : null;
+  if (!row) return { error: "پرونده پیدا نشد یا مجوز دسترسی ندارید." };
+  if (!EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) return { error: "این پرونده در وضعیت قابل ویرایش نیست." };
+  if (!(await can(user, "cases.edit"))) return { error: "اجازه ویرایش اطلاعات پرونده را ندارید." };
+  const [definition] = await db.select({ id: caseStepDefinitions.id, active: caseStepDefinitions.active }).from(caseStepDefinitions).where(eq(caseStepDefinitions.id, definitionId)).limit(1);
+  if (!definition || !definition.active) return { error: "این مرحله در زنجیرهٔ فعال ثبت پرونده یافت نشد." };
+  const facts = await loadCaseStepFacts(row.activist, row.application.status, row.application.id);
+  const plan = computeCaseSteps(facts);
+  const stepIndex = plan.steps.findIndex((step) => step.definitionId === definitionId);
+  if (stepIndex === -1) return { error: "این مرحله در زنجیرهٔ فعال ثبت پرونده یافت نشد." };
+  const gate = stepGateError(plan, stepIndex, plan.steps[stepIndex].title);
+  if (gate) return { error: gate };
+  const [def] = await db.select({ id: formDefinitions.id, version: formDefinitions.version, publishedConfig: formDefinitions.publishedConfig }).from(formDefinitions).where(and(eq(formDefinitions.entityType, "case_step"), eq(formDefinitions.entityId, definitionId), eq(formDefinitions.status, "published"))).limit(1);
+  if (!def?.publishedConfig) return { error: "برای این مرحله فرم منتشرشده‌ای وجود ندارد؛ از بخش مدیریت مراحل فیلدها را منتشر کنید." };
+  // کلیدهای پاسخ: cstep__<definitionId>__<fld_key> و فایل‌ها: cstepfile__...
+  const raw: FormAnswers = {};
+  for (const key of new Set([...data.keys()])) {
+    const match = /^cstep(?:file)?__\d+__(fld_[0-9a-z]+)$/.exec(String(key));
+    if (!match) continue;
+    const values = data.getAll(String(key)).map(String).filter(Boolean);
+    if (values.length) raw[match[1]] = values.length > 1 ? values : values[0];
+  }
+  const ownedDocs = new Set((await db.select({ id: documents.id }).from(documents).where(eq(documents.applicationId, row.application.id))).map((doc) => doc.id));
+  const result = validateFormAnswers(def.publishedConfig as FormConfig, raw, ownedDocs);
+  if (!result.ok) return { error: result.error };
+  try {
+    await db.transaction(async (tx) => {
+      const [locked] = await tx.select({ status: applications.status }).from(applications).where(eq(applications.id, row.application.id)).for("update");
+      if (!locked || locked.status !== row.application.status || !EDITABLE_STATUSES.includes(locked.status as EditableStatus)) throw new Error("Case status changed");
+      await tx.delete(formAnswers).where(and(eq(formAnswers.applicationId, row.application.id), eq(formAnswers.definitionId, def.id)));
+      await tx.insert(formAnswers).values({ definitionId: def.id, version: def.version, applicationId: row.application.id, activistId: row.activist.id, specialtyId: null, answers: result.answers });
+      const nextStatus = locked.status === "draft" ? "completing" : locked.status;
+      if (nextStatus !== locked.status) {
+        await tx.update(applications).set({ status: nextStatus, updatedAt: new Date() }).where(eq(applications.id, row.application.id));
+        await tx.insert(statusHistory).values({ applicationId: row.application.id, fromStatus: locked.status, toStatus: nextStatus, actorId: user.id, note: "ادامه تکمیل اطلاعات" });
+      }
+      await tx.insert(auditLogs).values({ actorId: user.id, action: "case_step_answers", targetType: "application", targetId: row.application.id, detail: `مرحلهٔ ${plan.steps[stepIndex].title}` });
+    });
+  } catch {
+    return { error: "ذخیرهٔ پاسخ‌های مرحله انجام نشد؛ دوباره تلاش کنید." };
+  }
+  refresh(row.application.id);
+  redirect(`/cases/${row.application.id}/steps/${stepIndex + 1}?m=${stashFlash("پاسخ‌های مرحله ذخیره شد.")}`);
 }

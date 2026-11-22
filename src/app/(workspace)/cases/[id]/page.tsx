@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { alias } from "drizzle-orm/pg-core";
 import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, Download, FileQuestion, FileText, MapPin, Pencil, Send, ShieldCheck, UserRound } from "lucide-react";
 import { db } from "@/db";
-import { activistOrganizations, activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, certificates, counties, documentRequests, documents, educationalCourses, educationRecords, expertNotes, formAnswers, formDefinitions, organizations, provinces, specialties, statusHistory, users, workHistory } from "@/db/schema";
+import { activistOrganizations, activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, certificates, counties, documentRequests, documents, educationalCourses, educationRecords, caseStepDefinitions, expertNotes, formAnswers, formDefinitions, organizations, provinces, specialties, statusHistory, users, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { completeness, getCaseForUser, isManager } from "@/lib/data";
 import { can } from "@/lib/permissions";
@@ -63,6 +63,13 @@ export default async function CaseDetailPage({ params, searchParams }: { params:
   ]);
   // الحاقیهٔ ۲.۲۳.۰ — پاسخ‌های فرم پویا؛ با نسخهٔ منتشرشده در لحظهٔ ثبت رندر می‌شود
   const dynAnswerRows = await db.select({ specialtyId: formAnswers.specialtyId, config: formDefinitions.publishedConfig, answers: formAnswers.answers }).from(formAnswers).innerJoin(formDefinitions, eq(formAnswers.definitionId, formDefinitions.id)).where(eq(formAnswers.applicationId, id));
+  // الحاقیهٔ ۲.۲۵.۰ — پاسخ‌های فیلدهای سفارشی مراحل ثبت پرونده؛ به نسخهٔ فرمِ
+  // لحظهٔ ثبت رندر می‌شود و با ویرایش/حذف بعدی مرحله دست‌نخورده می‌ماند.
+  const caseStepAnswerRows = await db.select({ stepTitle: caseStepDefinitions.title, config: formDefinitions.publishedConfig, answers: formAnswers.answers })
+    .from(formAnswers)
+    .innerJoin(formDefinitions, eq(formAnswers.definitionId, formDefinitions.id))
+    .innerJoin(caseStepDefinitions, eq(formDefinitions.entityId, caseStepDefinitions.id))
+    .where(and(eq(formAnswers.applicationId, id), eq(formDefinitions.entityType, "case_step")));
   const evidenceDocs = docs.filter((doc) => doc.kind === "evidence");
   // مرحله ششم: نقشهٔ پیوندهای معکوس هر مدرک (چه موجودیت‌هایی به آن اشاره می‌کنند).
   const docLinkIndex = await listDocumentLinks(person.id);
@@ -86,6 +93,9 @@ export default async function CaseDetailPage({ params, searchParams }: { params:
         {/* الحاقیهٔ ۲.۲۳.۰ — پاسخ‌های فرم پویای هر تخصص؛ به نسخهٔ فرمِ ثبت‌شده رندر می‌شود */}
         {dynAnswerRows.map((row) => { const view = row.specialtyId && row.config ? <DynamicAnswersView config={row.config as FormConfig} answers={(row.answers || {}) as FormAnswers} /> : null; return view ? <div key={`dyn-${row.specialtyId}`} className="dyn-detail-block"><strong>{specs.find((item) => item.specialtyId === row.specialtyId)?.title || "فرم پویا"}</strong>{view}</div> : null; })}
         {person.notes && <div className="history-copy"><div><small>توضیحات تکمیلی</small><p>{person.notes}</p></div></div>}</section>
+      {caseStepAnswerRows.length ? <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>فیلدهای سفارشی مراحل</span><h2>پاسخ‌های مراحل ثبت پرونده</h2><p>پاسخ‌های فیلدهای سفارشی که مدیر برای مراحل ثبت پرونده تعریف کرده است؛ هر پاسخ به نسخهٔ فرمِ لحظهٔ ثبت وفادار می‌ماند.</p></div><FileText size={19} /></div>
+        {caseStepAnswerRows.map((row, index) => row.config ? <div key={`cstep-${index}`} className="dyn-detail-block"><strong>{row.stepTitle}</strong><DynamicAnswersView config={row.config as FormConfig} answers={(row.answers || {}) as FormAnswers} /></div> : null)}
+      </section> : null}
       <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>آثار و تألیفات</span><h2>کتاب‌ها و مقاله‌ها</h2><p>آثار ثبت‌شده برای تخصص مؤلف؛ هر اثر با نام و موضوع.</p></div><FileText size={19} /></div>
         {writingRows.length ? <div className="writing-list">{writingRows.map((item) => <div className="writing-item" key={item.id}><span className={item.workType === "book" ? "writing-kind book" : "writing-kind article"}>{writingTypeLabels[item.workType]}</span><div><strong>{item.title}</strong>{item.topic && <small>موضوع: {item.topic}</small>}</div>{editable && <form action={deleteWritingAction}><input type="hidden" name="caseId" value={id} /><input type="hidden" name="recordId" value={item.id} /><button className="row-remove">حذف</button></form>}</div>)}</div> : <div className="inline-empty">اثری ثبت نشده است.</div>}
         {editable && <form action={addWritingAction} className="writing-add-form"><input type="hidden" name="caseId" value={id} /><div className="writing-add-grid"><label>نوع اثر<select name="workType" required><option value="book">کتاب</option><option value="article">مقاله</option></select></label><label>نام کتاب / مقاله<input name="title" required minLength={2} maxLength={180} placeholder="نام اثر" /></label><label>موضوع<input name="topic" maxLength={180} placeholder="اختیاری" /></label></div><button className="secondary-button">ثبت اثر</button></form>}

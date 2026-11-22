@@ -32,6 +32,9 @@ const messageRedirect: (id: string, message: string) => never = (id, message) =>
 
 const EDITABLE_STATUSES = ["draft", "completing", "needs_correction"] as const;
 type EditableStatus = (typeof EDITABLE_STATUSES)[number];
+// الحاقیهٔ ۲.۲۵.۰ — تعداد مراحل پویاست (تعریف DB)؛ بازهٔ ۱ تا ۱۶ سوپرست امن
+// و revalidatePath روی مسیرهای ناموجود بی‌ضرر است.
+const refreshStepPaths = (id: string) => { for (let s = 1; s <= 16; s++) revalidatePath(`/cases/${id}/steps/${s}`); };
 
 // dest الحاقیهٔ ۲.۱۹.۳ — مقصد ریدایرکت موفقیت؛ بررسی آمادگی کاربر را روی
 // خودِ مرحلهٔ بازبینی نگه می‌دارد تا بلافاصله دکمهٔ «ارسال برای بررسی» را ببیند.
@@ -110,7 +113,7 @@ export async function checkReadinessAction(data: FormData) {
     const summary = `بررسی آمادگی ارسال: ${fa.format(issues.reduce((total, issue) => total + issue.items.length, 0))} مورد نیازمند اصلاح در ${fa.format(issues.length)} مرحله — هدایت به مرحلهٔ ${fa.format(first.step)} (${first.stepTitle}).`;
     redirect(`/cases/${id}/steps/${first.step}?check=1&m=${stashFlash(summary)}`);
   }
-  await advanceCase(data, "ready", `/cases/${id}/steps/${CASE_STEPS.length}`);
+  await advanceCase(data, "ready", `/cases/${id}/steps/${facts.steps?.length || CASE_STEPS.length}`);
 }
 
 export async function returnToCompletingAction(data: FormData) {
@@ -198,10 +201,12 @@ export async function assignExpertAction(data: FormData) {
 export async function uploadDocumentAction(id: string, _state: ActionState, data: FormData): Promise<ActionState> {
   const user = await requireUser(); const row = await getCaseForUser(user, id);
   if (!row || !EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) return { error: "بارگذاری در این وضعیت مجاز نیست." };
-  // الحاقیهٔ ۲.۱۰.۰: قفل مراحل — مدرک تنها پس از تکمیل مراحل هویتی، مکانی و
-  // تخصص‌ها قابل بارگذاری است؛ کنترل از روی دادهٔ واقعی سرور انجام می‌شود.
+  // الحاقیهٔ ۲.۱۰.۰: قفل مراحل — مدرک تنها پس از تکمیل مراحل قبلی قابل
+  // بارگذاری است؛ کنترل از روی دادهٔ واقعی سرور و ترتیب فعال مراحل انجام می‌شود.
   const facts = await loadCaseStepFacts(row.activist, row.application.status, id);
-  const gate = stepGateError(computeCaseSteps(facts), 3, CASE_STEPS[3].title);
+  const plan = computeCaseSteps(facts);
+  const documentsIndex = plan.steps.findIndex((step) => step.key === "documents");
+  const gate = stepGateError(plan, documentsIndex, plan.steps[documentsIndex]?.title);
   if (gate) return { error: gate };
   const file = data.get("file"); const title = field(data, "title", 120);
   const requestedDocId = field(data, "documentRequestId", 40);
@@ -236,7 +241,7 @@ export async function uploadDocumentAction(id: string, _state: ActionState, data
     });
   } catch { await unlink(target).catch(() => undefined); return { error: "ذخیره مدرک انجام نشد یا وضعیت پرونده یا درخواست تغییر کرده است." }; }
   void deliverOutbox();
-  revalidatePath(`/cases/${id}`); revalidatePath(`/cases/${id}/steps/4`);
+  revalidatePath(`/cases/${id}`); refreshStepPaths(id);
   return { success: "مدرک با موفقیت بارگذاری شد." };
 }
 
@@ -248,15 +253,19 @@ export async function uploadFormFileAction(id: string, _state: ActionState, data
   const user = await requireUser(); const row = await getCaseForUser(user, id);
   if (!row || !EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) return { error: "بارگذاری در این وضعیت مجاز نیست." };
   const facts = await loadCaseStepFacts(row.activist, row.application.status, id);
-  // فایل فیلد پویا بخشی از خود مرحلهٔ تخصص‌هاست؛ تنها تکمیل مراحل ۱ و ۲ لازم است
-  const gate = stepGateError(computeCaseSteps(facts), 2, CASE_STEPS[2].title);
+  const plan = computeCaseSteps(facts);
+  // الحاقیهٔ ۲.۲۵.۰ — فایل فیلد پویا می‌تواند به مرحلهٔ تخصص‌ها یا یک مرحلهٔ
+  // سفارشی تعلق داشته باشد؛ گارد زنجیره بر اساس مرحلهٔ همان فرم اعمال می‌شود.
+  const entityType = String(data.get("entityType") || "specialty");
+  const entityId = Number(String(data.get("specialtyId") || ""));
+  const gateIndex = entityType === "case_step" ? plan.steps.findIndex((step) => step.definitionId === entityId) : plan.steps.findIndex((step) => step.key === "specialties");
+  const gate = stepGateError(plan, gateIndex, plan.steps[gateIndex]?.title);
   if (gate) return { error: gate };
-  const specialtyId = Number(String(data.get("specialtyId") || ""));
   const fieldKey = String(data.get("fieldKey") || "");
-  if (!Number.isSafeInteger(specialtyId) || !specialtyId || !/^fld_[0-9a-z]{6,16}$/.test(fieldKey)) return { error: "شناسهٔ فیلد معتبر نیست." };
+  if (!Number.isSafeInteger(entityId) || !entityId || !/^fld_[0-9a-z]{6,16}$/.test(fieldKey)) return { error: "شناسهٔ فیلد معتبر نیست." };
   const file = data.get("file");
   if (!(file instanceof File) || !file.size) return { error: "فایلی انتخاب نشده است." };
-  const [def] = await db.select({ publishedConfig: formDefinitions.publishedConfig }).from(formDefinitions).where(and(eq(formDefinitions.entityType, "specialty"), eq(formDefinitions.entityId, specialtyId), eq(formDefinitions.status, "published"))).limit(1);
+  const [def] = await db.select({ publishedConfig: formDefinitions.publishedConfig }).from(formDefinitions).where(and(eq(formDefinitions.entityType, entityType), eq(formDefinitions.entityId, entityId), eq(formDefinitions.status, "published"))).limit(1);
   const published = def?.publishedConfig as FormConfig | undefined;
   const fieldDef = published?.fields.find((item) => item.key === fieldKey && item.type === "file");
   if (!fieldDef?.file) return { error: "فیلد فایل در نسخهٔ منتشرشدهٔ فرم یافت نشد؛ فرم را دوباره بررسی کنید." };
@@ -279,7 +288,7 @@ export async function uploadFormFileAction(id: string, _state: ActionState, data
   try {
     const [newDoc] = await db.insert(documents).values({ applicationId: id, storageKey, originalName: path.basename(file.name).replace(/[\x00-\x1f\x7f]/g, "").slice(0, 180) || "form-file", title: fieldDef.label.slice(0, 120), docType: "form_answer", kind: "evidence", mimeType: sniff, size: file.size, uploadedBy: user.id }).returning({ id: documents.id });
     await db.insert(auditLogs).values({ actorId: user.id, action: "upload_form_file", targetType: "application", targetId: id, detail: fieldDef.label.slice(0, 120) });
-    revalidatePath(`/cases/${id}/steps/3`);
+    refreshStepPaths(id);
     return { success: "فایل با موفقیت بارگذاری شد.", data: { documentId: newDoc.id } };
   } catch {
     await unlink(target).catch(() => undefined);
@@ -291,9 +300,11 @@ export async function uploadPhotoAction(id: string, _state: ActionState, data: F
   const user = await requireUser(); const row = await getCaseForUser(user, id);
   if (!row || !(await can(user, "cases.edit")) || !EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) return { error: "بارگذاری تصویر در این وضعیت مجاز نیست." };
   // الحاقیهٔ ۲.۱۰.۰: قفل مراحل — تصویر پرسنلی هم مانند مدارک پس از تکمیل
-  // مراحل قبلی قابل بارگذاری است.
+  // مراحل قبلی قابل بارگذاری است (شمارهٔ مرحله از ترتیب فعال DB).
   const facts = await loadCaseStepFacts(row.activist, row.application.status, id);
-  const gate = stepGateError(computeCaseSteps(facts), 3, CASE_STEPS[3].title);
+  const photoPlan = computeCaseSteps(facts);
+  const photoIndex = photoPlan.steps.findIndex((step) => step.key === "documents");
+  const gate = stepGateError(photoPlan, photoIndex, photoPlan.steps[photoIndex]?.title);
   if (gate) return { error: gate };
   const file = data.get("file");
   if (!(file instanceof File) || !file.size) return { error: "فایل تصویر پرسنلی را انتخاب کنید." };
@@ -322,7 +333,7 @@ export async function uploadPhotoAction(id: string, _state: ActionState, data: F
     });
   } catch { await unlink(target).catch(() => undefined); return { error: "ذخیره تصویر انجام نشد یا وضعیت پرونده تغییر کرده است." }; }
   if (staleKey) await unlink(path.join(privateDir, "uploads", staleKey)).catch(() => undefined);
-  revalidatePath(`/cases/${id}`); revalidatePath(`/cases/${id}/steps/4`);
+  revalidatePath(`/cases/${id}`); refreshStepPaths(id);
   return { success: "تصویر پرسنلی با موفقیت بارگذاری شد." };
 }
 
@@ -343,7 +354,7 @@ export async function removePhotoAction(data: FormData) {
     await tx.insert(auditLogs).values({ actorId: user.id, action: "remove_photo", targetType: "application", targetId: id });
   });
   if (staleKey) await unlink(path.join(privateDir, "uploads", staleKey)).catch(() => undefined);
-  revalidatePath(`/cases/${id}`); revalidatePath(`/cases/${id}/steps/4`);
+  revalidatePath(`/cases/${id}`); refreshStepPaths(id);
   messageRedirect(id, "تصویر پرسنلی حذف شد.");
 }
 
