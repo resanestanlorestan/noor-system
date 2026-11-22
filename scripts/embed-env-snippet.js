@@ -6,7 +6,10 @@
     const envPath = path.join(__dirname, "..", "..", ".env"); // app root .env
     for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
       const m = line.match(/^\s*(?:export\s)?([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
-      if (m && !line.trim().startsWith("#") && process.env[m[1]] === undefined) {
+      if (m && !line.trim().startsWith("#")) {
+        // .env wins over anything inherited: LiteSpeed/cPanel persist env vars
+        // at exec time and they go stale (2.20.0 incident: old DATABASE_URL
+        // password shadowed .env and DB auth failed). Override, never skip.
         process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
       }
     }

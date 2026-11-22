@@ -10,8 +10,8 @@ import base64, json, os, re, subprocess, sys, time, secrets
 
 CREDS = "/home/z/my-project/scripts/.cp-creds"
 ZIP = "/home/z/my-project/download/noor-slim-2.20.0.zip"
-SHA = "5d64ad5487bd9950e3c735941585d347ce3af8357914da0319da5fd638a416ae"
-BUILD_ID = "_qET3uPiNrxNblaucjD29"
+SHA = "601869a2ad4f91dcca99999a8c4624bc36b8bcc4aff9c9845ca84e6953914175"
+BUILD_ID = "OHNNXiOg408HE9OTWX3PO"
 VERSION = "2.20.0"
 DEPLOY_SRC = "/home/z/my-project/scripts/deploy-2200/deploy-2200.py"
 JAR = "/tmp/cp-2200.jar"
