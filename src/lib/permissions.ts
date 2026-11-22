@@ -45,6 +45,7 @@ export const permissionCatalogue: PermissionDef[] = [
   { key: "users.manage", label: "مدیریت کاربران سازمانی", category: "کاربران", hint: "ایجاد، ویرایش و فعال/غیرفعال‌سازی حساب‌های سازمانی در محدوده مدیریتی" },
   { key: "settings.geo", label: "مدیریت تقسیمات جغرافیایی", category: "تنظیمات پایه", hint: "افزودن شهرستان به استان‌ها" },
   { key: "settings.references", label: "مدیریت تخصص‌ها و سازمان‌ها", category: "تنظیمات پایه" },
+  { key: "forms.manage", label: "مدیریت تخصص‌های قرآنی و فرم‌ساز پویا", category: "تنظیمات پایه", hint: "مدیریت تخصص‌ها (فعال/غیرفعال، توضیح، ترتیب) و طراحی فرم پویا با فیلدهای شرطی و مدارک برای هر تخصص" },
   { key: "messages.broadcast", label: "ارسال پیام گروهی به فعالان", category: "پیام‌ها", hint: "اطلاع‌رسانی دسته‌جمعی پیامک و اعلان به فعالان محدوده مدیریتی بر اساس فیلتر جغرافیا، تخصص و وضعیت پرونده" },
   { key: "sms.manage", label: "مدیریت پیامک‌ها", category: "پیام‌ها", hint: "قالب‌های پیامک، تنظیمات پنل پیامکی، تست ارسال و تاریخچهٔ پیامک‌های سامانه" },
   { key: "events.manage", label: "مدیریت رویدادها و اطلاع‌رسانی آن‌ها", category: "رویدادها", hint: "ثبت رویدادهای کشوری/استانی/شهرستانی، دعوت فعالان و یادآور پیامکی پیش از رویداد" },
@@ -72,7 +73,7 @@ export const roleDefaultPermissions: Record<UserRole, string[]> = {
     "cases.view_all", "cases.create", "cases.edit", "cases.submit", "cases.review", "cases.decide",
     "cases.assign_expert", "cases.refer_specialist", "cases.expert_notes", "cases.request_revision", "cases.appeal_manage",
     "cases.restore_version", "cases.export", "users.manage", "reports.view", "reminders.send",
-    "messages.broadcast", "events.manage", "classes.manage",
+    "messages.broadcast", "events.manage", "classes.manage", "forms.manage",
   ],
   county_admin: [
     "cases.view_all", "cases.create", "cases.edit", "cases.submit", "cases.review", "cases.decide",

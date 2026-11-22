@@ -3,7 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRight, CheckCircle2, Download, FileText, Pencil, Send, ShieldCheck, UserRound } from "lucide-react";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, correctionRequests, counties, documentRequests, documents, educationRecords, educationalCourses, provinces, specialties, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, correctionRequests, counties, documentRequests, documents, educationRecords, educationalCourses, formDefinitions, provinces, specialties, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getCaseForUser } from "@/lib/data";
 import { can } from "@/lib/permissions";
@@ -17,6 +17,8 @@ import { ConfirmButton, DocumentUpload, PhotoRemove, PhotoUpload } from "@/compo
 import { ReadinessBanner } from "@/components/readiness-banner";
 import { FlagFocus } from "@/components/flag-focus";
 import { checkReadinessAction, submitCaseAction } from "@/app/actions/cases";
+import { loadAnswersForCase } from "@/app/actions/forms";
+import { type FormAnswers, type FormConfig } from "@/lib/form-config";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
@@ -87,7 +89,17 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
       db.select().from(educationalCourses).where(eq(educationalCourses.activistId, person.id)).orderBy(educationalCourses.createdAt),
       db.select().from(activityRecords).where(eq(activityRecords.activistId, person.id)).orderBy(activityRecords.createdAt),
     ]);
-    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
+    // الحاقیهٔ ۲.۲۳.۰ — فرم‌های پویای منتشرشده برای تخصص‌های «انتخاب‌شدهٔ» این پرونده
+    // به همراه پاسخ‌های ذخیره‌شده؛ فرم غیرفعال‌شده در ویرایش نمایش داده نمی‌شود ولی
+    // پاسخ‌های تاریخی آن در جدول form_answers دست‌نخورده می‌مانند.
+    const selectedIds = selected.map((item) => item.id);
+    const dynDefRows = selectedIds.length ? await db.select({ id: formDefinitions.id, entityId: formDefinitions.entityId, version: formDefinitions.version, publishedConfig: formDefinitions.publishedConfig }).from(formDefinitions).where(and(eq(formDefinitions.entityType, "specialty"), inArray(formDefinitions.entityId, selectedIds), eq(formDefinitions.status, "published"))) : [];
+    const dynAnswerRows = dynDefRows.length ? await loadAnswersForCase(id, dynDefRows.map((item) => item.id)) : new Map();
+    const dynForms = dynDefRows.filter((item) => item.publishedConfig).map((item) => {
+      const saved = dynAnswerRows.get(item.id);
+      return { specialtyId: item.entityId, version: item.version, config: item.publishedConfig as FormConfig, saved: (saved?.answers || {}) as FormAnswers, title: allSpecialties.find((sp) => sp.id === item.entityId)?.title || "" };
+    });
+    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} dynForms={dynForms} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section></>;
   }
 
   if (requested.key === "documents") {

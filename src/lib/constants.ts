@@ -18,6 +18,10 @@ export const auditActionLabels: Record<string, string> = {
   create_staff: "ایجاد کاربر سازمانی", update_staff: "ویرایش کاربر سازمانی", activate_user: "فعال‌سازی کاربر", deactivate_user: "غیرفعال‌سازی کاربر",
   add_county: "افزودن شهرستان", export_report: "خروجی گزارش آماری",
   change_email: "تغییر ایمیل حساب", add_specialty: "افزودن تخصص", restore_version: "بازگردانی نسخه قبلی پرونده",
+  // الحاقیهٔ ۲.۲۳.۰ — برچسب‌های ممیزی فرم‌ساز پویا و مدیریت تخصص‌ها
+  form_draft_save: "ذخیرهٔ پیش‌نویس فرم پویا", form_publish: "انتشار نسخهٔ تازهٔ فرم پویا", form_disable: "غیرفعال‌سازی فرم پویا", form_enable: "فعال‌سازی مجدد فرم پویا", form_delete: "حذف فرم پویا",
+  specialty_meta_edit: "ویرایش نام/توضیح تخصص", specialty_toggle: "فعال/غیرفعال‌سازی تخصص", specialty_reorder: "تغییر ترتیب تخصص‌ها",
+  save_form_answers: "ذخیرهٔ پاسخ‌های فرم پویا پرونده", upload_form_file: "بارگذاری فایل فیلد پویا",
   export_case_list: "خروجی فهرست پرونده‌ها",
   // الحاقیهٔ ۲.۱۰.۲/۲.۱۰.۴ — برچسب‌های ممیزی حذف حساب و حذف پرونده
   delete_user: "حذف کامل حساب کاربر", anonymize_user: "حذف امن حساب (گمنام‌سازی)",

@@ -9,7 +9,7 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, activists, applicationVersions, applications, auditLogs, counties, documents, educationRecords, educationalCourses, provinces, specialties, statusHistory, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistWritings, activityRecords, activists, applicationVersions, applications, auditLogs, counties, documents, educationRecords, educationalCourses, formAnswers, formDefinitions, provinces, specialties, statusHistory, workHistory } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getCaseForUser, isManager, scopeCondition } from "@/lib/data";
 import { can } from "@/lib/permissions";
@@ -22,6 +22,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { CASE_STEPS, computeCaseSteps, loadCaseStepFacts, stepGateError, type CaseStepKey } from "@/lib/case-steps";
 import type { ActionState, DuplicateHint } from "@/lib/action-state";
+import { validateFormAnswers, type FormAnswers, type FormConfig } from "@/lib/form-config";
 
 const EDITABLE_STATUSES = ["draft", "completing", "needs_correction"] as const;
 type EditableStatus = (typeof EDITABLE_STATUSES)[number];
@@ -358,8 +359,13 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
   const chosen = [...new Set(data.getAll("specialties").map((v) => numeric(String(v))).filter((v): v is number => v !== null))];
   if (!chosen.length) return { error: "برای تکمیل این مرحله، انتخاب حداقل یک تخصص قرآنی الزامی است." };
   if (chosen.length > 20) return { error: "تعداد تخصص‌ها معتبر نیست." };
-  const found = await db.select({ id: specialties.id, code: specialties.code, title: specialties.title }).from(specialties).where(inArray(specialties.id, chosen));
+  const found = await db.select({ id: specialties.id, code: specialties.code, title: specialties.title, active: specialties.active }).from(specialties).where(inArray(specialties.id, chosen));
   if (found.length !== chosen.length) return { error: "یکی از تخصص‌ها معتبر نیست." };
+  // الحاقیهٔ ۲.۲۳.۰ — تخصص غیرفعال فقط برای «انتخاب جدید» بسته است؛ پرونده‌هایی
+  // که پیش‌تر آن را داشتند بدون اختلال قابل ویرایش می‌مانند و داده‌های تاریخی محفوظ است.
+  const previousSpecialtyIds = new Set((await db.select({ specialtyId: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id))).map((item) => item.specialtyId));
+  const blockedInactive = found.filter((item) => !item.active && !previousSpecialtyIds.has(item.id));
+  if (blockedInactive.length) return { error: `این تخصص‌ها غیرفعال شده‌اند و قابل انتخاب جدید نیستند: ${blockedInactive.map((item) => item.title).join("، ")}` };
   let detailRows: ReturnType<typeof parseSpecialtyDetailsInput>;
   let writingRows: ReturnType<typeof parseWritingsInput>;
   try {
@@ -412,6 +418,38 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
       const info = await stat(target);
       if (!info.isFile() || info.size !== doc.size) return { error: "یکی از فایل‌های بارگذاری‌شده یافت نشد؛ دوباره بارگذاری کنید." };
     } catch { return { error: "یکی از فایل‌های بارگذاری‌شده یافت نشد؛ دوباره بارگذاری کنید." }; }
+  }
+  // الحاقیهٔ ۲.۲۳.۰ — پاسخ‌های فرم‌ساز پویا: برای هر تخصص انتخابیِ دارای فرم منتشرشده،
+  // پاسخ‌ها علیه همان نسخهٔ منتشرشده اعتبارسنجی می‌شود؛ نمایش شرطی و الزامِ فیلدها
+  // دوباره روی سرور محاسبه می‌شود و مدرکِ فایل باید واقعاً متعلق به همین پرونده باشد.
+  const dynRaw = new Map<number, Record<string, string | string[]>>();
+  const dynPush = (specialtyId: number, fieldKey: string, value: string | string[]) => {
+    const box = dynRaw.get(specialtyId) || (dynRaw.set(specialtyId, {}), dynRaw.get(specialtyId)!);
+    box[fieldKey] = value;
+  };
+  for (const key of new Set([...data.keys()])) {
+    const dynMatch = /^dyn__(\d+)__(fld_[0-9a-z]+)$/.exec(String(key));
+    if (dynMatch) {
+      const values = data.getAll(String(key)).map(String).filter(Boolean);
+      if (values.length) dynPush(Number(dynMatch[1]), dynMatch[2], values.length > 1 ? values : values[0]);
+      continue;
+    }
+    const fileMatch = /^dynfile__(\d+)__(fld_[0-9a-z]+)$/.exec(String(key));
+    if (fileMatch) {
+      const value = String(data.get(String(key)) || "");
+      if (value) dynPush(Number(fileMatch[1]), fileMatch[2], value);
+    }
+  }
+  let dynToUpsert: Array<{ definitionId: number; version: number; specialtyId: number; answers: FormAnswers }> = [];
+  if (dynRaw.size) {
+    const dynDefs = await db.select({ id: formDefinitions.id, entityId: formDefinitions.entityId, version: formDefinitions.version, publishedConfig: formDefinitions.publishedConfig }).from(formDefinitions).where(and(eq(formDefinitions.entityType, "specialty"), inArray(formDefinitions.entityId, [...dynRaw.keys()]), eq(formDefinitions.status, "published")));
+    const ownedDocs = new Set((await db.select({ id: documents.id }).from(documents).where(eq(documents.applicationId, row.application.id))).map((doc) => doc.id));
+    for (const def of dynDefs) {
+      if (!def.publishedConfig) continue;
+      const result = validateFormAnswers(def.publishedConfig as FormConfig, dynRaw.get(def.entityId) || {}, ownedDocs);
+      if (!result.ok) return { error: `فرم پویای تخصص: ${result.error}` };
+      dynToUpsert.push({ definitionId: def.id, version: def.version, specialtyId: def.entityId, answers: result.answers });
+    }
   }
   try {
     await db.transaction(async (tx) => {
@@ -486,6 +524,12 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
         await tx.insert(statusHistory).values({ applicationId: row.application.id, fromStatus: locked.status, toStatus: nextStatus, actorId: user.id, note: "ادامه تکمیل اطلاعات" });
       }
       await tx.insert(auditLogs).values({ actorId: user.id, action: "update_draft", targetType: "application", targetId: row.application.id, detail: `مرحلهٔ ${CASE_STEPS[2].title}` });
+      // الحاقیهٔ ۲.۲۳.۰ — ذخیرهٔ پاسخ‌های فرم پویا؛ نسخهٔ فرم در لحظهٔ ثبت در ردیف
+      // می‌ماند تا انتشار نسخه‌های بعدی هرگز پاسخ‌های تاریخی را ناسازگار نکند.
+      for (const item of dynToUpsert) {
+        await tx.delete(formAnswers).where(and(eq(formAnswers.applicationId, row.application.id), eq(formAnswers.definitionId, item.definitionId)));
+        await tx.insert(formAnswers).values({ definitionId: item.definitionId, version: item.version, applicationId: row.application.id, activistId: row.activist.id, specialtyId: item.specialtyId, answers: item.answers });
+      }
     });
   } catch {
     return { error: "ذخیرهٔ مرحلهٔ تخصص‌ها و سوابق انجام نشد؛ دوباره تلاش کنید." };

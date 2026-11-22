@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, FileClock, FileText, GraduationCap, History, Image as ImageIcon, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, PenLine, PhoneCall, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, BellRing, BookOpenText, Cable, CalendarDays, ClipboardList, FileClock, FileText, GraduationCap, History, Image as ImageIcon, Inbox, LayoutDashboard, ListChecks, LogOut, MapPinned, Megaphone, Menu, MessageSquareText, PenLine, PhoneCall, Search, ShieldCheck, Trophy, UserRound, UsersRound, X } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { roleLabels, type UserRole } from "@/lib/constants";
@@ -40,6 +40,7 @@ export function WorkspaceShell({ name, role, customRoleLabel, permissions, today
     { href: "/users", label: "مدیریت کاربران", icon: UsersRound, allowed: allowed("users.manage") },
     { href: "/permissions", label: "نقش‌ها و مجوزها", icon: ShieldCheck, allowed: allowed("permissions.manage") },
     { href: "/settings", label: "تقسیمات جغرافیایی", icon: MapPinned, allowed: allowed("settings.geo") || allowed("settings.references") },
+    { href: "/forms", label: "فرم‌ساز پویا", icon: ClipboardList, allowed: allowed("forms.manage") },
     { href: "/audit", label: "رویدادهای حساس", icon: History, allowed: allowed("audit.view") },
     { href: "/outbox", label: "صندوق پیام‌ها", icon: Inbox, allowed: allowed("outbox.view") },
     // الحاقیهٔ ۲.۱۵.۰ — مدیریت API فقط برای مدیر ارشد در منو دیده می‌شود

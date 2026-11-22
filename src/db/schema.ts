@@ -114,7 +114,48 @@ export const specialties = pgTable("quranic_specialties", {
   id: serial("id").primaryKey(),
   code: varchar("code", { length: 40 }).notNull().unique(),
   title: varchar("title", { length: 100 }).notNull(),
+  // الحاقیهٔ ۲.۲۳.۰ — مدیریت تخصص‌ها از داشبورد: فعال/غیرفعال، توضیح راهنما، ترتیب
+  active: boolean("active").notNull().default(true),
+  description: varchar("description", { length: 500 }),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
+// الحاقیهٔ ۲.۲۳.۰ — فرم‌ساز پویا: تعریف فرم هر موجودیت (فعلاً تخصص)، نسخه‌بندی انتشار
+// و پاسخ‌های ساختاریافتهٔ هر پرونده. ساختار فیلدها JSONB با کلیدهای پایدار فیلد/گزینه؛
+// پاسخ‌ها به نسخهٔ منتشرشده در زمان ثبت ارجاع می‌دهند تا با ویرایش‌های بعدی ناسازگار نشوند.
+export const formDefinitions = pgTable("form_definitions", {
+  id: serial("id").primaryKey(),
+  entityType: varchar("entity_type", { length: 30 }).notNull().default("specialty"),
+  entityId: integer("entity_id").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("draft").$type<"draft" | "published" | "disabled">(),
+  version: integer("version").notNull().default(0),
+  draftConfig: jsonb("draft_config").notNull().default({}),
+  publishedConfig: jsonb("published_config"),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("form_definitions_entity_uq").on(table.entityType, table.entityId)]);
+export const formDefinitionVersions = pgTable("form_definition_versions", {
+  id: serial("id").primaryKey(),
+  definitionId: integer("definition_id").notNull().references(() => formDefinitions.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  config: jsonb("config").notNull(),
+  publishedBy: uuid("published_by").references(() => users.id),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("form_versions_uq").on(table.definitionId, table.version)]);
+export const formAnswers = pgTable("form_answers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  definitionId: integer("definition_id").notNull().references(() => formDefinitions.id),
+  version: integer("version").notNull(),
+  applicationId: uuid("application_id").notNull().references(() => applications.id),
+  activistId: uuid("activist_id").references(() => activists.id),
+  specialtyId: integer("specialty_id").references(() => specialties.id),
+  answers: jsonb("answers").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("form_answers_case_uq").on(table.applicationId, table.definitionId),
+  index("form_answers_definition_idx").on(table.definitionId),
+  index("form_answers_specialty_idx").on(table.specialtyId),
+]);
 export const activists = pgTable("quranic_activists", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").unique().references(() => users.id),

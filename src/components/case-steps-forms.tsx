@@ -16,6 +16,8 @@ import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, e
 import { JalaliDateInput } from "@/components/jalali-date-picker";
 import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal";
 import { SectionUpload, type DocSlot } from "@/components/doc-upload";
+import { DynamicFieldsRenderer, type DynValues } from "@/components/dynamic-fields";
+import { carryOverAnswers, type FormAnswers, type FormConfig } from "@/lib/form-config";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
@@ -209,8 +211,11 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
 
 /* ------------------- مرحلهٔ ۳ — تخصص‌ها و سوابق ------------------- */
 
-export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, flagSections }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; flagSections?: string[] }) {
+export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, dynForms, flagSections }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; dynForms?: Array<{ specialtyId: number; title: string; version: number; config: FormConfig; saved: FormAnswers }>; flagSections?: string[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveSpecialtiesStepAction, initialActionState);
+  // الحاقیهٔ ۲.۲۳.۰ — پاسخ‌های فرم‌های پویا؛ پاسخ‌های ذخیره‌شدهٔ قبلی (حتی از
+  // نسخهٔ قدیمی‌تر فرم) با carryOverAnswers پیش‌پر می‌شوند و بقیه خالی می‌مانند.
+  const [dynValues, setDynValues] = useState<Record<number, DynValues>>(() => Object.fromEntries((dynForms || []).map((form) => [form.specialtyId, carryOverAnswers(form.config, form.saved)])));
   const [selectedSpecialties, setSelectedSpecialties] = useState<Set<number>>(() => new Set(defaults.specialtyIds));
   const [specialtyDetailState, setSpecialtyDetailState] = useState<Record<number, DetailState>>(() => {
     const map: Record<number, DetailState> = {};
@@ -347,6 +352,12 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
           <SectionUpload section={`specialty:${item.code}`} slots={certSlots[item.id] || []} onChange={(next) => setCertSlots((current) => ({ ...current, [item.id]: next }))} label="بارگذاری گواهی تخصص" />
         </div>;
       })}
+      {/* الحاقیهٔ ۲.۲۳.۰ — فرم پویای هر تخصص انتخاب‌شده؛ نمایش شرطی با همان موتور
+          مشترک سرور اجرا می‌شود و پاسخ‌ها همراه ذخیرهٔ همین مرحله ثبت و ممیزی می‌شوند */}
+      {(dynForms || []).filter((form) => selectedSpecialties.has(form.specialtyId)).map((form) => <div className="dyn-form-block" key={`dyn-${form.specialtyId}`}>
+        <div className="specialty-detail-head"><strong>فرم اختصاصی تخصص: {form.title}</strong><small>فیلدها بر اساس انتخاب‌های شما باز و بسته می‌شوند؛ فیلدهای ستاره‌دار الزامی‌اند و پاسخ‌ها با «ذخیره و ادامه» ثبت می‌شود.</small></div>
+        <DynamicFieldsRenderer config={form.config} applicationId={caseId} specialtyId={form.specialtyId} values={dynValues[form.specialtyId] || {}} onValueChange={(fieldKey, value) => setDynValues((current) => ({ ...current, [form.specialtyId]: { ...(current[form.specialtyId] || {}), [fieldKey]: value } }))} />
+      </div>)}
       </div>
       {authorSpecialty && selectedSpecialties.has(authorSpecialty.id) && <div className="writings-block">
         {defaults.writings.length > 0 && <div className="education-existing"><h3 className="form-subhead">آثار ثبت‌شده این پرونده</h3><ul>{defaults.writings.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.workTypeLabel, item.topic].filter(Boolean).join(" · ")}</small></li>)}</ul><small>حذف یا افزودن به این فهرست از صفحه جزئیات پرونده نیز امکان‌پذیر است؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}

@@ -8,7 +8,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { stashFlash } from "@/lib/flash";
 import { db } from "@/db";
-import { activistSpecialties, activistSpecialtyDetails, activistOrganizations, activistWritings, activityRecords, activists, appeals, applicationVersions, applications, auditLogs, caseReminders, certificates, correctionRequests, documentRequests, documents, educationRecords, educationalCourses, expertNotes, expertReferrals, notifications, statusHistory, users, workHistory } from "@/db/schema";
+import { activistSpecialties, activistSpecialtyDetails, activistOrganizations, activistWritings, activityRecords, activists, appeals, applicationVersions, applications, auditLogs, caseReminders, certificates, correctionRequests, documentRequests, documents, educationRecords, educationalCourses, expertNotes, expertReferrals, formAnswers, formDefinitions, notifications, statusHistory, users, workHistory } from "@/db/schema";
+import { formFileMimeHints, type FormConfig } from "@/lib/form-config";
 import { requireUser } from "@/lib/auth";
 import { completeness, getCaseForUser, isManager, missingRequired } from "@/lib/data";
 import { can } from "@/lib/permissions";
@@ -237,6 +238,53 @@ export async function uploadDocumentAction(id: string, _state: ActionState, data
   void deliverOutbox();
   revalidatePath(`/cases/${id}`); revalidatePath(`/cases/${id}/steps/4`);
   return { success: "مدرک با موفقیت بارگذاری شد." };
+}
+
+/** الحاقیهٔ ۲.۲۳.۰ — بارگذاری فایل فیلد پویا (صوت/تصویر/PDF) برای فرم تخصص.
+ *  محدودیت نوع و حجم از نسخهٔ منتشرشدهٔ فرم روی سرور خوانده می‌شود، نه از ورودی
+ *  کلاینت؛ نوع واقعی فایل از بایت‌های ابتدایی تشخیص داده می‌شود و مدرک همانند
+ *  سایر مدارک در جدول activist_documents با docType=form_answer ثبت می‌گردد. */
+export async function uploadFormFileAction(id: string, _state: ActionState, data: FormData): Promise<ActionState> {
+  const user = await requireUser(); const row = await getCaseForUser(user, id);
+  if (!row || !EDITABLE_STATUSES.includes(row.application.status as EditableStatus)) return { error: "بارگذاری در این وضعیت مجاز نیست." };
+  const facts = await loadCaseStepFacts(row.activist, row.application.status, id);
+  // فایل فیلد پویا بخشی از خود مرحلهٔ تخصص‌هاست؛ تنها تکمیل مراحل ۱ و ۲ لازم است
+  const gate = stepGateError(computeCaseSteps(facts), 2, CASE_STEPS[2].title);
+  if (gate) return { error: gate };
+  const specialtyId = Number(String(data.get("specialtyId") || ""));
+  const fieldKey = String(data.get("fieldKey") || "");
+  if (!Number.isSafeInteger(specialtyId) || !specialtyId || !/^fld_[0-9a-z]{6,16}$/.test(fieldKey)) return { error: "شناسهٔ فیلد معتبر نیست." };
+  const file = data.get("file");
+  if (!(file instanceof File) || !file.size) return { error: "فایلی انتخاب نشده است." };
+  const [def] = await db.select({ publishedConfig: formDefinitions.publishedConfig }).from(formDefinitions).where(and(eq(formDefinitions.entityType, "specialty"), eq(formDefinitions.entityId, specialtyId), eq(formDefinitions.status, "published"))).limit(1);
+  const published = def?.publishedConfig as FormConfig | undefined;
+  const fieldDef = published?.fields.find((item) => item.key === fieldKey && item.type === "file");
+  if (!fieldDef?.file) return { error: "فیلد فایل در نسخهٔ منتشرشدهٔ فرم یافت نشد؛ فرم را دوباره بررسی کنید." };
+  if (file.size > fieldDef.file.maxSizeMb * 1024 * 1024) return { error: `حجم فایل نباید بیش از ${fieldDef.file.maxSizeMb} مگابایت باشد.` };
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const sniff =
+    bytes.subarray(0, 3).toString("latin1") === "ID3" || (bytes[0] === 0xff && bytes[1] !== 0x00 && (bytes[1] & 0xe0) === 0xe0) ? "audio/mpeg"
+      : bytes.subarray(0, 4).toString("latin1") === "RIFF" && bytes.subarray(8, 12).toString("latin1") === "WAVE" ? "audio/wav"
+        : bytes.subarray(0, 4).toString("latin1") === "OggS" ? "audio/ogg"
+          : bytes.subarray(4, 8).toString("latin1") === "ftyp" ? "audio/mp4"
+            : bytes.subarray(0, 5).toString() === "%PDF-" ? "application/pdf"
+              : bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? "image/png"
+                : bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? "image/jpeg" : null;
+  if (!sniff) return { error: "نوع فایل شناخته نشد؛ فقط فایل صوتی، تصویر یا PDF معتبر مجاز است." };
+  const accept: Record<string, string[]> = { audio: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4"], image: ["image/png", "image/jpeg"], pdf: ["application/pdf"], any: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "image/png", "image/jpeg", "application/pdf"] };
+  if (!accept[fieldDef.file.accept].includes(sniff)) return { error: `این فیلد فقط ${formFileMimeHints[fieldDef.file.accept]} می‌پذیرد.` };
+  const storageKey = randomUUID(); const directory = path.join(privateDir, "uploads"); const target = path.join(directory, storageKey);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
+  try {
+    const [newDoc] = await db.insert(documents).values({ applicationId: id, storageKey, originalName: path.basename(file.name).replace(/[\x00-\x1f\x7f]/g, "").slice(0, 180) || "form-file", title: fieldDef.label.slice(0, 120), docType: "form_answer", kind: "evidence", mimeType: sniff, size: file.size, uploadedBy: user.id }).returning({ id: documents.id });
+    await db.insert(auditLogs).values({ actorId: user.id, action: "upload_form_file", targetType: "application", targetId: id, detail: fieldDef.label.slice(0, 120) });
+    revalidatePath(`/cases/${id}/steps/3`);
+    return { success: "فایل با موفقیت بارگذاری شد.", data: { documentId: newDoc.id } };
+  } catch {
+    await unlink(target).catch(() => undefined);
+    return { error: "ذخیرهٔ فایل انجام نشد؛ دوباره تلاش کنید." };
+  }
 }
 
 export async function uploadPhotoAction(id: string, _state: ActionState, data: FormData): Promise<ActionState> {
