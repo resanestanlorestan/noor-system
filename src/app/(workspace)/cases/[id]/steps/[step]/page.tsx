@@ -12,6 +12,7 @@ import { activityRecordKindLabels, courseFieldOptions, documentTypeLabels, educa
 import { CASE_STEPS, collectReadinessIssues, computeCaseSteps, loadCaseStepFacts, readinessFlagSections, DOC_REQUESTS_LABEL } from "@/lib/case-steps";
 import { CaseStepsBar } from "@/components/case-progress";
 import { IdentityStepForm, LocationStepForm, SpecialtiesStepForm } from "@/components/case-steps-forms";
+import { OrganizationForm } from "@/components/management-forms";
 import { ConfirmButton, DocumentUpload, PhotoRemove, PhotoUpload } from "@/components/case-controls";
 import { ReadinessBanner } from "@/components/readiness-banner";
 import { FlagFocus } from "@/components/flag-focus";
@@ -66,7 +67,13 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
     const allProvinces = await db.select().from(provinces).orderBy(provinces.name);
     const allCounties = await db.select().from(counties).orderBy(counties.name);
     const limited = user.effectiveRole !== "super_admin" && user.effectiveRole !== "activist";
-    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<LocationStepForm caseId={id} provinces={limited ? allProvinces.filter((item) => item.id === user.provinceId) : allProvinces} counties={limited && user.countyId ? allCounties.filter((item) => item.id === user.countyId) : allCounties} activityProvinces={allProvinces} activityCounties={allCounties} needsChangeReason={nonActivistEditor} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ provinceId: person.provinceId, countyId: person.countyId, city: person.city || "", postalCode: person.postalCode || "", address: person.address || "", activityProvinceId: person.activityProvinceId, activityCountyId: person.activityCountyId, activityPlace: person.activityPlace || "", organization: person.organization || "" }} /></section></>;
+    // الحاقیهٔ ۲.۲۲.۰ — انتقال «افزودن سازمان جدید» از تنظیمات به همین مرحله؛
+    // همان اکشن و همان گارد مجوز settings.references با فرم تنظیمات، با فهرست‌های
+    // هم‌دامنهٔ همین مرحله؛ فهرست و حذف سازمان‌ها همچنان در /settings است.
+    const canRefs = await can(user, "settings.references");
+    const stepProvinces = limited ? allProvinces.filter((item) => item.id === user.provinceId) : allProvinces;
+    const stepCounties = limited && user.countyId ? allCounties.filter((item) => item.id === user.countyId) : allCounties;
+    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<LocationStepForm caseId={id} provinces={stepProvinces} counties={stepCounties} activityProvinces={allProvinces} activityCounties={allCounties} needsChangeReason={nonActivistEditor} flagSections={checkMode ? readinessFlagSections(requested) : []} defaults={{ provinceId: person.provinceId, countyId: person.countyId, city: person.city || "", postalCode: person.postalCode || "", address: person.address || "", activityProvinceId: person.activityProvinceId, activityCountyId: person.activityCountyId, activityPlace: person.activityPlace || "", organization: person.organization || "" }} /></section>{canRefs && <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>فهرست سازمان‌ها</span><h2>افزودن سازمان جدید</h2><p>سازمان تازه در فهرست عمومی ذخیره می‌شود و برای «همکاری سازمانی» پرونده‌ها قابل انتخاب خواهد بود.</p></div></div><OrganizationForm provinces={stepProvinces} counties={stepCounties} /></section>}</>;
   }
 
   if (requested.key === "specialties") {
