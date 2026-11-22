@@ -456,6 +456,11 @@
 .county-list span { color:var(--muted-2); }
 .org-list > div { flex-direction:column; align-items:flex-start; gap:3px; }
 .org-list small { color:var(--muted-3); font-size:10px; line-height:1.7; }
+/* الحاقیهٔ ۲.۲۱.۰ — دکمهٔ حذف در فهرست‌های اطلاعات پایه */
+.county-list > div { align-items:center; gap:10px; }
+.county-list .list-remove { margin-inline-start:auto; }
+.org-list .list-remove { margin-inline-start:auto; }
+.county-list .table-link, .org-list .table-link { white-space:nowrap; }
 
 /* Administrative reports */
 .report-filter-panel { padding-bottom:18px; }

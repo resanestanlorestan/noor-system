@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useState } from "react";
 import { LoaderCircle, Plus } from "lucide-react";
-import { addCountyAction, addOrganizationAction, addSpecialtyAction, createStaffAction, deleteUserAction, sweepStaleActivistsAction, toggleUserAction } from "@/app/actions/management";
+import { addCountyAction, addOrganizationAction, addSpecialtyAction, createStaffAction, deleteCountyAction, deleteOrganizationAction, deleteSpecialtyAction, deleteUserAction, sweepStaleActivistsAction, toggleUserAction } from "@/app/actions/management";
 import { deleteCaseAction, restoreCaseAction } from "@/app/actions/cases";
 import { initialActionState } from "@/lib/action-state";
 import { roleLabels, type UserRole } from "@/lib/constants";
@@ -39,6 +39,23 @@ export function OrganizationForm({ provinces, counties }: { provinces: Province[
     <label>نام مدیر مؤسسه<input name="managerName" value={managerName} onChange={(e) => setManagerName(e.target.value)} maxLength={140} placeholder="اختیاری" /></label>
     <label className="full-field">نشانی مؤسسه<input name="address" maxLength={250} placeholder="اختیاری؛ نشانی کامل دفتر مؤسسه" /></label>
   </div>{state.error && <div className="form-error" role="alert">{state.error}</div>}{state.success && <div className="form-success" role="status">{state.success}</div>}<button className="primary-button" disabled={pending}>{pending ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} افزودن سازمان</button></form>;
+}
+/** الحاقیهٔ ۲.۲۱.۰ — حذف شهرستان از فهرست تقسیمات با تأیید کاربر. گارد اصلی
+ *  سمت سرور است: اگر حساب، رکورد فعال، سازمان یا دورهٔ آموزشی به شهرستان متصل
+ *  باشد حذف رد می‌شود و تعداد وابستگی‌ها اعلام می‌گردد (رویدادها فقط اتصال
+ *  جغرافیایی خود را از دست می‌دهند). */
+export function DeleteCounty({ id, name, province }: { id:string; name:string; province:string }) {
+  return <form action={deleteCountyAction} className="list-remove"><input type="hidden" name="countyId" value={id} /><button className="table-link danger" onClick={(event) => {if (!window.confirm(`شهرستان «${name}» (${province}) از فهرست حذف شود؟\n\nحذف تنها زمانی انجام می‌شود که هیچ حساب کاربری، رکورد فعال، سازمان یا دورهٔ آموزشی به این شهرستان متصل نباشد؛ در غیر این صورت سامانه حذف را رد می‌کند و تعداد وابستگی‌ها را اعلام می‌کند.\n\nاگر رویدادی در این شهرستان ثبت شده باشد، اتصال جغرافیایی آن رویداد خنثی می‌شود. این عمل پس از تأیید برگشت‌ناپذیر است.`)) event.preventDefault();}}>حذف</button></form>;
+}
+/** الحاقیهٔ ۲.۲۱.۰ — حذف تخصص از فهرست مرجع با تأیید کاربر؛ حذفِ تخصصِ در حال
+ *  استفاده (پروندهٔ فعالان، حساب کارشناس، ارجاع، دوره) از سمت سرور رد می‌شود. */
+export function DeleteSpecialty({ id, title }: { id:string; title:string }) {
+  return <form action={deleteSpecialtyAction} className="list-remove"><input type="hidden" name="specialtyId" value={id} /><button className="table-link danger" onClick={(event) => {if (!window.confirm(`تخصص «${title}» از فهرست حذف شود؟\n\nحذف تنها زمانی انجام می‌شود که این تخصص در هیچ پروندهٔ فعالان، حساب کارشناسی، ارجاع کارشناسی یا دورهٔ آموزشی استفاده نشده باشد؛ در غیر این صورت سامانه حذف را رد می‌کند و تعداد وابستگی‌ها را اعلام می‌کند. این عمل پس از تأیید برگشت‌ناپذیر است.`)) event.preventDefault();}}>حذف</button></form>;
+}
+/** الحاقیهٔ ۲.۲۱.۰ — حذف سازمان از فهرست مرجع با تأیید کاربر؛ حذفِ سازمانِ
+ *  دارای رکورد همکاری فعالان از سمت سرور رد می‌شود. */
+export function DeleteOrganization({ id, name }: { id:string; name:string }) {
+  return <form action={deleteOrganizationAction} className="list-remove"><input type="hidden" name="organizationId" value={id} /><button className="table-link danger" onClick={(event) => {if (!window.confirm(`سازمان «${name}» از فهرست حذف شود؟\n\nحذف تنها زمانی انجام می‌شود که هیچ رکورد همکاری فعالان به این سازمان متصل نباشد؛ در غیر این صورت سامانه حذف را رد می‌کند و تعداد آن را اعلام می‌کند. این عمل پس از تأیید برگشت‌ناپذیر است.`)) event.preventDefault();}}>حذف</button></form>;
 }
 export function ToggleUser({ id, active }: { id:string; active:boolean }) {
   return <form action={toggleUserAction}><input type="hidden" name="userId" value={id} /><button className="small-action" onClick={(event) => {if (!window.confirm(active ? "این حساب غیرفعال شود؟" : "این حساب دوباره فعال شود؟")) event.preventDefault();}}>{active ? "غیرفعال‌سازی" : "فعال‌سازی"}</button></form>;

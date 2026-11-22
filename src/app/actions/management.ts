@@ -1,11 +1,11 @@
 "use server";
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { stashFlash } from "@/lib/flash";
 import { db } from "@/db";
-import { activistOrganizations, activistWritings, activists, activityRecords, appeals, applicationVersions, applications, auditLogs, certificates, correctionRequests, counties, customRoles, documents, documentRequests, educationRecords, educationalCourses, emailVerificationTokens, events, expertNotes, expertReferrals, mfaRecoveryCodes, messageBroadcasts, messageOutbox, notifications, organizations, passwordResetTokens, pendingMfaSessions, provinces, sessions, specialties, statusHistory, userSpecialties, users, workHistory } from "@/db/schema";
+import { activistOrganizations, activistSpecialties, activistSpecialtyDetails, activistWritings, activists, activityRecords, appeals, applicationVersions, applications, auditLogs, certificates, classesCounties, classesSpecialties, correctionRequests, counties, customRoles, documents, documentRequests, educationRecords, educationalCourses, emailVerificationTokens, events, expertNotes, expertReferrals, mfaRecoveryCodes, messageBroadcasts, messageOutbox, notifications, organizations, passwordResetTokens, pendingMfaSessions, provinces, sessions, specialties, statusHistory, userSpecialties, users, workHistory } from "@/db/schema";
 import { syncManagerRecipients } from "@/lib/manager-sms";
 import { purgeUserAccount, removeUserFiles } from "@/lib/user-purge";
 import { audit, hashPassword, requireUser } from "@/lib/auth";
@@ -205,6 +205,73 @@ export async function addOrganizationAction(_state: ActionState, data: FormData)
     await audit(actor.id, "add_organization", "organization", String(created.id));
   } catch { return { error: "ثبت سازمان انجام نشد؛ دوباره تلاش کنید." }; }
   revalidatePath("/settings"); return { success: "سازمان جدید به فهرست اضافه شد." };
+}
+
+/** الحاقیهٔ ۲.۲۱.۰ — حذف اطلاعات پایه (شهرستان/تخصص/سازمان) با گارد سمت سرور:
+ *  آیتم فقط وقتی حذف می‌شود که هیچ ارجاع معناداری به آن باقی نمانده باشد؛
+ *  در غیر این صورت حذف رد می‌شود و تعداد هر وابستگی در پیام شمرده می‌شود تا
+ *  مدیر ابتدا آن‌ها را منتقل یا پاک کند. تأیید کاربر در سمت کلاینت هم هست ولی
+ *  گارد اصلی همین‌جاست (هم‌الگوی حذف حساب و پرونده). */
+function referencedParts(rows: Array<[number, string]>) {
+  return rows.filter(([n]) => n > 0).map(([n, label]) => `${faNumber(n)} ${label}`).join("، ");
+}
+
+export async function deleteCountyAction(data: FormData) {
+  const actor = await requireUser(); const id = Number(field(data, "countyId", 10));
+  const fail = (message: string) => redirect("/settings?m=" + stashFlash(message));
+  if (!(await can(actor, "settings.geo"))) return fail("حذف شهرستان فقط با مجوز مدیریت تقسیمات جغرافیایی ممکن است.");
+  if (!id) return fail("شهرستان معتبر نیست.");
+  const [county] = await db.select({ id: counties.id, name: counties.name }).from(counties).where(eq(counties.id, id)).limit(1);
+  if (!county) return fail("شهرستان پیدا نشد؛ ممکن است پیش‌تر حذف شده باشد.");
+  const [u] = await db.select({ n: count() }).from(users).where(eq(users.countyId, id));
+  const [a] = await db.select({ n: count() }).from(activists).where(eq(activists.countyId, id));
+  const [o] = await db.select({ n: count() }).from(organizations).where(eq(organizations.countyId, id));
+  const [k] = await db.select({ n: count() }).from(classesCounties).where(eq(classesCounties.countyId, id));
+  const parts = referencedParts([[u.n, "حساب کاربری"], [a.n, "رکورد فعال"], [o.n, "سازمان"], [k.n, "دورهٔ آموزشی"]]);
+  if (parts) return fail(`حذف شهرستان «${county.name}» ممکن نیست؛ این شهرستان در ${parts} استفاده شده است. ابتدا وابستگی‌ها را منتقل یا پاک کنید.`);
+  try { await db.delete(counties).where(eq(counties.id, id)); }
+  catch { return fail("حذف شهرستان انجام نشد؛ دوباره تلاش کنید."); }
+  await audit(actor.id, "delete_county", "county", String(id), county.name);
+  revalidatePath("/settings");
+  return redirect("/settings?m=" + stashFlash(`شهرستان «${county.name}» از فهرست حذف شد.`));
+}
+
+export async function deleteSpecialtyAction(data: FormData) {
+  const actor = await requireUser(); const id = Number(field(data, "specialtyId", 10));
+  const fail = (message: string) => redirect("/settings?m=" + stashFlash(message));
+  if (!(await can(actor, "settings.references"))) return fail("حذف تخصص فقط با مجوز مدیریت تخصص‌ها و سازمان‌ها ممکن است.");
+  if (!id) return fail("تخصص معتبر نیست.");
+  const [specialty] = await db.select({ id: specialties.id, title: specialties.title }).from(specialties).where(eq(specialties.id, id)).limit(1);
+  if (!specialty) return fail("تخصص پیدا نشد؛ ممکن است پیش‌تر حذف شده باشد.");
+  const [ap] = await db.select({ n: count() }).from(activistSpecialties).where(eq(activistSpecialties.specialtyId, id));
+  const [ad] = await db.select({ n: count() }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.specialtyId, id));
+  const [us] = await db.select({ n: count() }).from(userSpecialties).where(eq(userSpecialties.specialtyId, id));
+  const [er] = await db.select({ n: count() }).from(expertReferrals).where(eq(expertReferrals.specialtyId, id));
+  const [cs] = await db.select({ n: count() }).from(classesSpecialties).where(eq(classesSpecialties.specialtyId, id));
+  const parts = referencedParts([[ap.n, "رکورد تخصص فعالان"], [ad.n, "جزئیات تخصص"], [us.n, "حساب کارشناس"], [er.n, "ارجاع کارشناسی"], [cs.n, "دورهٔ آموزشی"]]);
+  if (parts) return fail(`حذف تخصص «${specialty.title}» ممکن نیست؛ این تخصص در ${parts} استفاده شده است. ابتدا وابستگی‌ها را منتقل یا پاک کنید.`);
+  try { await db.delete(specialties).where(eq(specialties.id, id)); }
+  catch { return fail("حذف تخصص انجام نشد؛ دوباره تلاش کنید."); }
+  await audit(actor.id, "delete_specialty", "specialty", String(id), specialty.title);
+  revalidatePath("/settings");
+  return redirect("/settings?m=" + stashFlash(`تخصص «${specialty.title}» از فهرست حذف شد.`));
+}
+
+export async function deleteOrganizationAction(data: FormData) {
+  const actor = await requireUser(); const id = Number(field(data, "organizationId", 10));
+  const fail = (message: string) => redirect("/settings?m=" + stashFlash(message));
+  if (!(await can(actor, "settings.references"))) return fail("حذف سازمان فقط با مجوز مدیریت تخصص‌ها و سازمان‌ها ممکن است.");
+  if (!id) return fail("سازمان معتبر نیست.");
+  const [organization] = await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, id)).limit(1);
+  if (!organization) return fail("سازمان پیدا نشد؛ ممکن است پیش‌تر حذف شده باشد.");
+  const [ao] = await db.select({ n: count() }).from(activistOrganizations).where(eq(activistOrganizations.organizationId, id));
+  const parts = referencedParts([[ao.n, "رکورد همکاری فعالان"]]);
+  if (parts) return fail(`حذف سازمان «${organization.name}» ممکن نیست؛ این سازمان در ${parts} استفاده شده است. ابتدا رکوردهای همکاری مربوط را منتقل یا پاک کنید.`);
+  try { await db.delete(organizations).where(eq(organizations.id, id)); }
+  catch { return fail("حذف سازمان انجام نشد؛ دوباره تلاش کنید."); }
+  await audit(actor.id, "delete_organization", "organization", String(id), organization.name);
+  revalidatePath("/settings");
+  return redirect("/settings?m=" + stashFlash(`سازمان «${organization.name}» از فهرست حذف شد.`));
 }
 
 /** الحاقیهٔ ۲.۱۷.۰ — حذف یکپارچهٔ حساب کاربر؛ فقط مدیر کل سامانه و فقط برای
