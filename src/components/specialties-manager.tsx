@@ -4,8 +4,8 @@
 // انتخاب تخصص برای باز کردن فرم‌ساز. همهٔ تغییرات با اکشن سرور و ممیزی ثبت می‌شوند.
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Pencil, Plus, X } from "lucide-react";
-import { createSpecialtyAction, reorderSpecialtiesAction, saveSpecialtyMetaAction, toggleSpecialtyAction } from "@/app/actions/forms";
+import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
+import { createSpecialtyAction, deleteSpecialtyAction, reorderSpecialtiesAction, saveSpecialtyMetaAction, toggleSpecialtyAction } from "@/app/actions/forms";
 import { initialActionState } from "@/lib/action-state";
 
 export type ManagedSpecialty = { id: number; title: string; description: string | null; active: boolean; formStatus: "none" | "draft" | "published" | "disabled"; version: number };
@@ -44,7 +44,7 @@ export function SpecialtiesManager({ rows, selectedId }: { rows: ManagedSpecialt
   const statusLabel = (item: ManagedSpecialty) => item.formStatus === "published" ? `فرم فعال — نسخهٔ ${item.version}` : item.formStatus === "draft" ? "پیش‌نویس فرم" : item.formStatus === "disabled" ? "فرم غیرفعال" : "بدون فرم";
 
   return <section className="ws-panel detail-section">
-    <div className="detail-section-head"><div><span>مدیریت تخصص‌های قرآنی</span><h2>فهرست تخصص‌ها</h2><p>ترتیب نمایش، فعال/غیرفعال و توضیح هر تخصص از همین‌جا مدیریت می‌شود؛ انتخاب یک تخصص، فرم‌ساز آن را باز می‌کند.</p></div></div>
+    <div className="detail-section-head"><div><span>مدیریت تخصص‌های قرآنی</span><h2>فهرست تخصص‌ها</h2><p>افزودن، ویرایش نام و توضیح، فعال/غیرفعال، ترتیب نمایش و حذف هر تخصص — قدیمی یا جدید — از همین‌جا انجام می‌شود؛ انتخاب یک تخصص، فرم‌ساز آن را باز می‌کند. حذف تنها زمانی انجام می‌شود که تخصص در هیچ پرونده، حساب، ارجاع، دوره یا فرم پویایی استفاده نشده باشد؛ در غیر این صورت آن را «غیرفعال» کنید تا سوابق دست‌نخورده بماند.</p></div></div>
     <form action={addAction} className="management-form">
       <div className="form-grid">
         <label>افزودن تخصص جدید<input name="title" maxLength={100} required placeholder="مثلاً حفظ قرآن" /></label>
@@ -65,6 +65,10 @@ export function SpecialtiesManager({ rows, selectedId }: { rows: ManagedSpecialt
           <button type="button" title="بالا" onClick={() => move(index, -1)} disabled={index === 0}><ChevronUp size={14} /></button>
           <button type="button" title="پایین" onClick={() => move(index, 1)} disabled={index === list.length - 1}><ChevronDown size={14} /></button>
           <button type="button" title="ویرایش نام و توضیح" onClick={() => setEditing(editing === item.id ? null : item.id)}><Pencil size={14} /></button>
+          <form action={deleteSpecialtyAction} className="inline-form">
+            <input type="hidden" name="specialtyId" value={item.id} />
+            <button type="submit" className="row-remove" title="حذف تخصص" onClick={(event) => { if (!window.confirm(`تخصص «${item.title}» از فهرست حذف شود؟\n\nحذف تنها زمانی انجام می‌شود که این تخصص در هیچ پروندهٔ فعالان، حساب کارشناسی، ارجاع کارشناسی، دورهٔ آموزشی یا فرم پویا استفاده نشده باشد؛ در غیر این صورت سامانه حذف را رد می‌کند و تعداد وابستگی‌ها را اعلام می‌کند. این عمل پس از تأیید برگشت‌ناپذیر است.`)) event.preventDefault(); }}><Trash2 size={14} /></button>
+          </form>
           <form action={async (fd: FormData) => { await toggleSpecialtyAction(fd); }} className="inline-form">
             <input type="hidden" name="specialtyId" value={item.id} />
             <input type="hidden" name="active" value={item.active ? "0" : "1"} />

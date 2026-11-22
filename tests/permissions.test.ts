@@ -54,17 +54,23 @@ describe("کاتالوگ مجوزها", () => {
     expect([...used].sort()).toEqual([...permissionCategories].sort());
   });
 
-  it("seed مهاجرت‌های ۰۰۰۴ تا ۰۰۱۴ دقیقاً با پیش‌فرض‌های کد هم‌خوان است", () => {
+  it("seed مهاجرت‌های ۰۰۰۴ تا ۰۰۳۰ دقیقاً با پیش‌فرض‌های کد هم‌خوان است", () => {
     const seeded = new Set<string>();
     const pattern = /\('([a-z_]+)','([a-z_.]+)'\)/g;
     // 0004 seeds the original catalogue; 0005 (reminders.send), 0006
     // (messages.broadcast), 0007 (events.manage), 0014 (cases.expert_notes),
-    // 0018 (sms.manage), 0025 (cms.manage) and 0028 (classes.*) append later
-    // additions. Their union must equal the code defaults exactly.
-    for (const file of ["0004_permission-matrix.sql", "0005_overdue-reminders.sql", "0006_group-broadcasts.sql", "0007_events.sql", "0014_expert-notes.sql", "0018_sms-management.sql", "0025-site-content.sql", "0028-classes.sql"]) {
+    // 0018 (sms.manage), 0025 (cms.manage), 0028 (classes.*) and 0030
+    // (forms.manage) append later additions. Their union must equal the code
+    // defaults exactly. 0030 grants via SELECT … FROM (VALUES ('role'::enum))
+    // instead of literal pairs, so a second pattern parses that form too.
+    const valuesPattern = /'([a-z_.]+)'\s+FROM\s*\(VALUES\s+([\s\S]*?)\)\s+AS\s+r\(/;
+    const rolePattern = /'([a-z_]+)'::"app_role"/g;
+    for (const file of ["0004_permission-matrix.sql", "0005_overdue-reminders.sql", "0006_group-broadcasts.sql", "0007_events.sql", "0014_expert-notes.sql", "0018_sms-management.sql", "0025-site-content.sql", "0028-classes.sql", "0030-form-builder.sql"]) {
       const sql = readFileSync(path.join(process.cwd(), "drizzle", file), "utf8");
       let match: RegExpExecArray | null;
       while ((match = pattern.exec(sql))) seeded.add(`${match[1]}:${match[2]}`);
+      const values = valuesPattern.exec(sql);
+      if (values) for (const role of values[2].matchAll(rolePattern)) seeded.add(`${role[1]}:${values[1]}`);
     }
     const expected = new Set<string>();
     for (const role of ROLES) for (const key of roleDefaultPermissions[role]) expected.add(`${role}:${key}`);

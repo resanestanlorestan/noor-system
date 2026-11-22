@@ -5,12 +5,15 @@
 // تنها وقتی ممکن است که هیچ پاسخی ذخیره نشده باشد.
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { formAnswers, formDefinitions, formDefinitionVersions, specialties } from "@/db/schema";
 import { audit, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { field } from "@/lib/case-input";
 import { faNumber } from "@/lib/format";
+import { stashFlash } from "@/lib/flash";
+import { specialtyUsageParts } from "@/lib/specialty-usage";
 import type { ActionState } from "@/lib/action-state";
 import { newFieldKey, newOptionKey, validateFormConfig, type FormConfig } from "@/lib/form-config";
 
@@ -117,6 +120,28 @@ export async function reorderSpecialtiesAction(data: FormData): Promise<ActionSt
   } catch {
     return { error: "ذخیرهٔ ترتیب انجام نشد." };
   }
+}
+
+/** الحاقیهٔ ۲.۲۴.۰ — حذف کامل تخصص از فرم‌ساز؛ همهٔ تخصص‌های موجود (قدیمی و
+ * جدید) مشمول همین حذف‌اند. گارد ارجاع سراسری: حذف تنها وقتی انجام می‌شود که
+ * تخصص در هیچ پروندهٔ فعالان، حساب کارشناسی، ارجاع، دورهٔ آموزشی، فرم پویا یا
+ * پاسخ ثبت‌شده‌ای استفاده نشده باشد؛ در غیر این صورت رد و شمارش وابستگی‌ها
+ * اعلام می‌شود تا سوابق تاریخی دست‌نخورده بمانند (جایگزین امن: غیرفعال‌سازی). */
+export async function deleteSpecialtyAction(data: FormData) {
+  const fail = (message: string) => redirect("/forms?m=" + stashFlash(message));
+  const guard = await manageGuard();
+  if ("error" in guard) return fail(guard.error);
+  const id = Number(field(data, "specialtyId", 10));
+  if (!id) return fail("تخصص معتبر نیست.");
+  const [specialty] = await db.select({ id: specialties.id, title: specialties.title }).from(specialties).where(eq(specialties.id, id)).limit(1);
+  if (!specialty) return fail("تخصص پیدا نشد؛ ممکن است پیش‌تر حذف شده باشد.");
+  const parts = await specialtyUsageParts(id);
+  if (parts) return fail(`حذف تخصص «${specialty.title}» ممکن نیست؛ این تخصص در ${parts} استفاده شده است. می‌توانید از دکمهٔ «غیرفعال» استفاده کنید تا فقط انتخاب جدید بسته شود و سوابق دست‌نخورده بمانند.`);
+  try { await db.delete(specialties).where(eq(specialties.id, id)); }
+  catch { return fail("حذف تخصص انجام نشد؛ دوباره تلاش کنید."); }
+  await audit(guard.user.id, "delete_specialty", "specialty", String(id), specialty.title);
+  revalidatePath("/forms"); revalidatePath("/settings"); revalidatePath("/cases"); revalidatePath("/register");
+  return redirect("/forms?m=" + stashFlash(`تخصص «${specialty.title}» از فهرست حذف شد.`));
 }
 
 /** ذخیرهٔ پیش‌نویس ساختار فرم (اعتبارسنجی کامل ساختار سمت سرور) */

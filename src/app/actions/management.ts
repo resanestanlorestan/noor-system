@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { stashFlash } from "@/lib/flash";
 import { db } from "@/db";
-import { activistOrganizations, activistSpecialties, activistSpecialtyDetails, activistWritings, activists, activityRecords, appeals, applicationVersions, applications, auditLogs, certificates, classesCounties, classesSpecialties, correctionRequests, counties, customRoles, documents, documentRequests, educationRecords, educationalCourses, emailVerificationTokens, events, expertNotes, expertReferrals, mfaRecoveryCodes, messageBroadcasts, messageOutbox, notifications, organizations, passwordResetTokens, pendingMfaSessions, provinces, sessions, specialties, statusHistory, userSpecialties, users, workHistory } from "@/db/schema";
+import { activistOrganizations, activistWritings, activists, activityRecords, appeals, applicationVersions, applications, auditLogs, certificates, classesCounties, correctionRequests, counties, customRoles, documents, documentRequests, educationRecords, educationalCourses, emailVerificationTokens, events, expertNotes, expertReferrals, mfaRecoveryCodes, messageBroadcasts, messageOutbox, notifications, organizations, passwordResetTokens, pendingMfaSessions, provinces, sessions, specialties, statusHistory, userSpecialties, users, workHistory } from "@/db/schema";
 import { syncManagerRecipients } from "@/lib/manager-sms";
+import { specialtyUsageParts } from "@/lib/specialty-usage";
 import { purgeUserAccount, removeUserFiles } from "@/lib/user-purge";
 import { audit, hashPassword, requireUser } from "@/lib/auth";
 import { normalizeDigits, normalizeText, faNumber } from "@/lib/format";
@@ -243,17 +244,14 @@ export async function deleteSpecialtyAction(data: FormData) {
   if (!id) return fail("تخصص معتبر نیست.");
   const [specialty] = await db.select({ id: specialties.id, title: specialties.title }).from(specialties).where(eq(specialties.id, id)).limit(1);
   if (!specialty) return fail("تخصص پیدا نشد؛ ممکن است پیش‌تر حذف شده باشد.");
-  const [ap] = await db.select({ n: count() }).from(activistSpecialties).where(eq(activistSpecialties.specialtyId, id));
-  const [ad] = await db.select({ n: count() }).from(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.specialtyId, id));
-  const [us] = await db.select({ n: count() }).from(userSpecialties).where(eq(userSpecialties.specialtyId, id));
-  const [er] = await db.select({ n: count() }).from(expertReferrals).where(eq(expertReferrals.specialtyId, id));
-  const [cs] = await db.select({ n: count() }).from(classesSpecialties).where(eq(classesSpecialties.specialtyId, id));
-  const parts = referencedParts([[ap.n, "رکورد تخصص فعالان"], [ad.n, "جزئیات تخصص"], [us.n, "حساب کارشناس"], [er.n, "ارجاع کارشناسی"], [cs.n, "دورهٔ آموزشی"]]);
+  // الحاقیهٔ ۲.۲۴.۰ — گارد مشترک با مسیر /forms: شمارش وابستگی‌ها حالا فرم پویا
+  // و پاسخ‌های ثبت‌شده را هم پوشش می‌دهد (هلپر specialtyUsageParts).
+  const parts = await specialtyUsageParts(id);
   if (parts) return fail(`حذف تخصص «${specialty.title}» ممکن نیست؛ این تخصص در ${parts} استفاده شده است. ابتدا وابستگی‌ها را منتقل یا پاک کنید.`);
   try { await db.delete(specialties).where(eq(specialties.id, id)); }
   catch { return fail("حذف تخصص انجام نشد؛ دوباره تلاش کنید."); }
   await audit(actor.id, "delete_specialty", "specialty", String(id), specialty.title);
-  revalidatePath("/settings");
+  revalidatePath("/settings"); revalidatePath("/forms");
   return redirect("/settings?m=" + stashFlash(`تخصص «${specialty.title}» از فهرست حذف شد.`));
 }
 
