@@ -12,5 +12,8 @@
   "type": "commonjs",
   "dependencies": {
     "@embedded-postgres/linux-x64": "^18.6.0-beta.19"
-  }
+  },
+  "trustedDependencies": [
+    "@embedded-postgres/linux-x64"
+  ]
 }
