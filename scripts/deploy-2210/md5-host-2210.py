@@ -64,7 +64,7 @@ print("stub saved", flush=True)
 import urllib.request, urllib.error
 url = f"{BASE}/mh2210.php?k={TOK}"
 try:
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=120) as resp:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=300) as resp:
         body = resp.read().decode()
 except Exception as e:
     sys.exit(f"STUB_HIT_FAIL: {e}")
