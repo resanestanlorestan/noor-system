@@ -2,9 +2,10 @@ import ExcelJS from "exceljs";
 import { audit, getCurrentUser } from "@/lib/auth";
 import { isManager } from "@/lib/data";
 import { loadExportDetails, parseCaseFilters, searchCasesForExport, sortLabels } from "@/lib/case-search";
+import { buildFullInfoSheet } from "@/lib/case-export-model";
 import { isoToJalali, faDate } from "@/lib/format";
 import { decryptSecret } from "@/lib/local-secrets";
-import { courseFieldOptions, cooperationTypeOptions, documentTypeLabels, educationTypeLabels, formatSpecialtyDetail, memorizationCertTypeOptions, sourceLabels, statusLabels, activityRecordKindLabels } from "@/lib/constants";
+import { courseFieldOptions, cooperationTypeOptions, documentTypeLabels, educationTypeLabels, sourceLabels, statusLabels, activityRecordKindLabels } from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,45 +69,12 @@ export async function GET(request: Request) {
     });
     sheet.eachRow((row) => { row.alignment = { horizontal: "right", vertical: "middle", readingOrder: "rtl", wrapText: true }; });
 
-    /* ---------------- الحاقیهٔ ۲.۱۲.۰ — شیت «اطلاعات کامل پرونده‌ها» ---------------- */
-    addSheet(workbook, "اطلاعات کامل", "اطلاعات کامل هر پرونده — همهٔ فیلدهای ثبت‌شده",
-      ["ردیف", "نام", "نام خانوادگی", "نام پدر", "کد ملی", "شماره شناسنامه", "محل صدور", "تاریخ تولد", "جنسیت", "شماره تماس", "همراه جایگزین", "ایمیل", "استان سکونت", "شهرستان", "شهر", "کد پستی", "نشانی", "استان فعالیت", "شهرستان فعالیت", "محل فعالیت", "مؤسسه قرآنی", "شغل", "تحصیلات دانشگاهی", "تحصیلات حوزوی", "میزان حفظ", "نوع مدرک حفظ", "تخصص‌ها و جزئیات", "رشته‌های معلمی و مدرسی", "سوابق همکاری", "دوره‌های گذرانده‌شده", "فعالیت‌های قرآنی", "آثار مؤلف", "گواهینامه‌ها", "تعداد مدارک بارگذاری‌شده", "وضعیت بررسی پرونده", "منبع ثبت", "تاریخ ثبت", "تاریخ ارسال برای بررسی"],
-      Array(38).fill(14),
-      rows.map((row, index) => {
-        const educationFor = details.education.filter((item) => item.activistId === row.activistId);
-        const universityText = educationFor.filter((item) => item.type === "university").map((item) => [item.level, item.field, item.centerName, item.certificate].filter(Boolean).join(" — ")).join(" | ") || (row.universityLevel || "");
-        const seminaryText = educationFor.filter((item) => item.type === "seminary").map((item) => [item.level, item.field, item.centerName, item.certificate].filter(Boolean).join(" — ")).join(" | ") || (row.seminaryLevel || "");
-        const specialtyFull = details.specialtyDetails.filter((item) => item.activistId === row.activistId)
-          .map((item) => {
-            const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts);
-            return detail ? `${item.title}: ${detail}` : item.title;
-          }).join(" | ");
-        const memorizationText = details.specialtyDetails.find((item) => item.activistId === row.activistId && item.code === "memorizer");
-        // الحاقیهٔ ۲.۱۴.۲ — ستون مستقل رشته‌های معلمی (معلم قرآن) و مدرسی (مدرس قرآن)
-        const teachText = details.specialtyDetails.filter((item) => item.activistId === row.activistId && (item.code === "teacher" || item.code === "trainer"))
-          .map((item) => {
-            const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts);
-            return detail ? `${item.title}: ${detail}` : item.title;
-          }).join(" | ");
-        const workText = details.work.filter((item) => item.activistId === row.activistId).map((item) => [item.title, item.employer, faOption(cooperationTypeOptions, item.cooperationType), item.position, item.startDate ? `${isoToJalali(item.startDate)} تا ${item.endDate ? isoToJalali(item.endDate) : "اکنون"}` : null].filter(Boolean).join(" — ")).join(" | ");
-        const courseText = details.courses.filter((item) => item.activistId === row.activistId).map((item) => [item.title, item.provider, faOption(courseFieldOptions, item.field), item.completedDate ? isoToJalali(item.completedDate) : null, item.hours ? `${item.hours} ساعت` : null].filter(Boolean).join(" — ")).join(" | ");
-        const activityText = details.activities.filter((item) => item.activistId === row.activistId).map((item) => [activityRecordKindLabels[item.kind], item.title, faOption(courseFieldOptions, item.field), item.organization, item.position].filter(Boolean).join(" — ")).join(" | ");
-        const writingsText = details.writings.filter((item) => item.activistId === row.activistId).map((item) => `${item.workType === "book" ? "کتاب" : "مقاله"}: ${item.title}${item.topic ? ` (${item.topic})` : ""}`).join(" | ");
-        const certificateText = details.certificates.filter((item) => item.activistId === row.activistId).map((item) => [item.title, item.issuer, item.issuedDate ? isoToJalali(item.issuedDate) : null].filter(Boolean).join(" — ")).join(" | ");
-        const documentCount = details.documents.filter((item) => item.applicationId === row.id).length;
-        return [
-          index + 1, clean(row.firstName), clean(row.lastName), value(row.fatherName), idCell(row.id, row.nationalIdLast4),
-          value(row.idCardNumber), value(row.idIssuePlace), jalali(row.birthDate), row.gender === "female" ? "زن" : row.gender === "male" ? "مرد" : "—",
-          value(row.phone), value(row.alternatePhone), value(row.email), value(row.province), value(row.county), value(row.city), value(row.postalCode), value(row.address),
-          value(row.activityProvince), value(row.activityCounty), value(row.activityPlace), value(row.organization), value(row.job),
-          value(universityText), value(seminaryText),
-          value(memorizationText ? formatSpecialtyDetail("memorizer", memorizationText.detailValue, memorizationText.detailOptions, memorizationText.juzParts) : null),
-          value(faOption(memorizationCertTypeOptions, row.memorizationCertType)),
-          value(specialtyFull), value(teachText),
-          value(workText), value(courseText), value(activityText), value(writingsText), value(certificateText),
-          documentCount, statusLabels[row.status], sourceLabels[row.source], faDate(row.createdAt), row.submittedAt ? faDate(row.submittedAt) : "—",
-        ];
-      }));
+    /* ---------------- الحاقیهٔ ۲.۲۷.۰ — شیت «اطلاعات کامل پرونده‌ها» ---------------- */
+    // همهٔ فیلدهای فرم ثبت پرونده به ترتیب فرم، با برچسب‌های override-آگاه
+    // مدیریت مراحل (۲.۲۶.۰) + ستون‌های پویای فیلدهای سفارشی مراحل فعال
+    // (۲.۲۵.۰)؛ هیچ فیلد یا پاسخی از خروجی جا نمی‌ماند.
+    const full = await buildFullInfoSheet(rows, details, fullNationalIds);
+    addSheet(workbook, "اطلاعات کامل", "اطلاعات کامل هر پرونده — همهٔ فیلدهای ثبت‌شده به ترتیب فرم ثبت", full.header, full.widths, full.rows);
 
     /* ---------------- شیت‌های تفصیلی: یک ردیف به‌ازای هر رکورد ---------------- */
     addSheet(workbook, "تحصیلات", "همهٔ سوابق تحصیلی حوزوی و دانشگاهی ثبت‌شده",

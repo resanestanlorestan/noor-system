@@ -106,7 +106,12 @@ export async function searchCasesForExport(user: SessionUser, filters: CaseSearc
     birthDate: activists.birthDate, gender: activists.gender, city: activists.city, address: activists.address,
     activityPlace: activists.activityPlace, organization: activists.organization, job: activists.job,
     universityLevel: activists.universityLevel, seminaryLevel: activists.seminaryLevel, memorizationCertType: activists.memorizationCertType,
-    status: applications.status, source: applications.source, createdAt: applications.createdAt, submittedAt: applications.submittedAt, province: provinces.name, county: counties.name,
+    // الحاقیهٔ ۲.۲۷.۰ — توضیحات تکمیلی و کارشناس مسئول برای شیت اطلاعات کامل
+    notes: activists.notes,
+    status: applications.status, source: applications.source, createdAt: applications.createdAt, submittedAt: applications.submittedAt,
+    // الحاقیهٔ ۲.۲۷.۰ — کارشناس مسئول برای ستون «کارشناس مسئول» خروجی اکسل
+    assignedExpertId: applications.assignedExpertId,
+    province: provinces.name, county: counties.name,
     activityProvince: activityProvince.name, activityCounty: activityCounty.name,
     specialty: sql<string | null>`(select string_agg(${specialties.title}, '، ') from ${activistSpecialties} inner join ${specialties} on ${specialties.id} = ${activistSpecialties.specialtyId} where ${activistSpecialties.activistId} = ${activists.id})`,
   }).from(applications).innerJoin(activists, eq(applications.activistId, activists.id))
@@ -121,6 +126,7 @@ export async function searchCasesForExport(user: SessionUser, filters: CaseSearc
 // و مدارک بارگذاری‌شده) در یک رفت‌وبرگشت با inArray خوانده می‌شود تا هیچ
 // اطلاعاتی از خروجی جا نماند.
 export type ExportCaseRow = Awaited<ReturnType<typeof searchCasesForExport>>["rows"][number];
+export type ExportDetails = Awaited<ReturnType<typeof loadExportDetails>>;
 
 export async function loadExportDetails(rows: ExportCaseRow[]) {
   const activistIds = rows.map((row) => row.activistId);
@@ -134,7 +140,7 @@ export async function loadExportDetails(rows: ExportCaseRow[]) {
     db.select().from(activityRecords).where(inArray(activityRecords.activistId, activistIds)),
     db.select().from(activistWritings).where(inArray(activistWritings.activistId, activistIds)),
     db.select().from(certificatesTable).where(inArray(certificatesTable.activistId, activistIds)),
-    db.select({ applicationId: documents.applicationId, title: documents.title, docType: documents.docType, originalName: documents.originalName, size: documents.size, createdAt: documents.createdAt, activistId: applications.activistId })
+    db.select({ id: documents.id, applicationId: documents.applicationId, title: documents.title, docType: documents.docType, originalName: documents.originalName, size: documents.size, createdAt: documents.createdAt, activistId: applications.activistId })
       .from(documents).innerJoin(applications, eq(documents.applicationId, applications.id)).where(inArray(documents.applicationId, applicationIds)),
     db.select({ activistId: activistSpecialties.activistId, code: specialties.code, title: specialties.title, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts })
       .from(activistSpecialties).innerJoin(specialties, eq(specialties.id, activistSpecialties.specialtyId))

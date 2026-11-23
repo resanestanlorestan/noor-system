@@ -23,6 +23,8 @@ export const auditActionLabels: Record<string, string> = {
   specialty_meta_edit: "ویرایش نام/توضیح تخصص", specialty_toggle: "فعال/غیرفعال‌سازی تخصص", specialty_reorder: "تغییر ترتیب تخصص‌ها",
   save_form_answers: "ذخیرهٔ پاسخ‌های فرم پویا پرونده", upload_form_file: "بارگذاری فایل فیلد پویا",
   export_case_list: "خروجی فهرست پرونده‌ها",
+  // الحاقیهٔ ۲.۲۷.۰ — خروجی اکسل کامل تک‌پرونده
+  export_case_detail: "خروجی اکسل جزئیات پرونده",
   // الحاقیهٔ ۲.۱۰.۲/۲.۱۰.۴ — برچسب‌های ممیزی حذف حساب و حذف پرونده
   delete_user: "حذف کامل حساب کاربر", anonymize_user: "حذف امن حساب (گمنام‌سازی)",
   delete_case_bank: "حذف پرونده با ماندگاری در بانک", delete_case_total: "حذف کلی پرونده", restore_case: "بازیابی پرونده حذف‌شده",
