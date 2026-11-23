@@ -19,6 +19,7 @@ import { audit, getCurrentUser } from "@/lib/auth";
 import { getCaseForUser, isManager } from "@/lib/data";
 import { exportJalali, exportValue, formAnswerText, loadPublishedStepForms, loadStepAnswers } from "@/lib/case-export-model";
 import { loadCaseFieldMeta } from "@/lib/case-field-meta";
+import { loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import { resolvedCaseField } from "@/lib/case-field-catalog";
 import { isFieldVisible, type FormAnswers } from "@/lib/form-config";
 import { faDate } from "@/lib/format";
@@ -49,9 +50,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const manager = isManager(user);
     const activityProvince = alias(provinces, "activity_province");
     const activityCounty = alias(counties, "activity_county");
-    const [meta, stepForms, specRows, educationRows, workRows, courseRows, activityRows, writingRows, certificateRows, docRows, provinceRows, countyRows, activityProvinceRows, activityCountyRows, expertRows] = await Promise.all([
+    const [meta, stepForms, specMeta, specRows, educationRows, workRows, courseRows, activityRows, writingRows, certificateRows, docRows, provinceRows, countyRows, activityProvinceRows, activityCountyRows, expertRows] = await Promise.all([
       loadCaseFieldMeta(),
       loadPublishedStepForms(),
+      // الحاقیهٔ ۲.۲۸.۰ — جزئیات تخصص‌ها با تنظیمات پویای پنل مدیریت
+      loadSpecialtyDetailMeta(),
       db.select({ specialtyId: activistSpecialties.specialtyId, title: specialties.title, code: specialties.code, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts })
         .from(activistSpecialties)
         .innerJoin(specialties, eq(specialties.id, activistSpecialties.specialtyId))
@@ -141,9 +144,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     // مرحلهٔ ۳ فرم — تخصص‌ها و سوابق
     addSection(label("specialties.section.grid") || "تخصص‌های قرآنی");
     addField("تخصص‌های قرآنی", specs.map((item) => item.title).join("، "));
-    addField(label("specialties.details"), specs.filter((item) => formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts)).map((item) => { const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts); return detail ? `${item.title}: ${detail}` : item.title; }).join(" | "));
+    addField(label("specialties.details"), specs.filter((item) => formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts, specMeta[item.code])).map((item) => { const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts, specMeta[item.code]); return detail ? `${item.title}: ${detail}` : item.title; }).join(" | "));
     const memorizeRow = specs.find((item) => item.code === "memorizer");
-    addField("میزان حفظ", memorizeRow ? formatSpecialtyDetail("memorizer", memorizeRow.detailValue, memorizeRow.detailOptions, memorizeRow.juzParts) : null);
+    addField("میزان حفظ", memorizeRow ? formatSpecialtyDetail("memorizer", memorizeRow.detailValue, memorizeRow.detailOptions, memorizeRow.juzParts, specMeta[memorizeRow.code]) : null);
     addField("نوع مدرک حفظ", person.memorizationCertType && person.memorizationCertType in memorizationCertTypeOptions ? memorizationCertTypeOptions[person.memorizationCertType] : null);
     addField(label("specialties.job"), person.job);
     addField(label("specialties.notes"), person.notes);
@@ -174,7 +177,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     specSheet.addRow(["تخصص‌های ثبت‌شده پرونده با جزئیات کامل"]);
     const specHead = specSheet.addRow(["تخصص", "جزئیات (سطح / حوزه‌ها / رشته‌ها)", "اجزای حفظ"]);
     styleHeader(specSheet, specSheet.rowCount);
-    specs.forEach((item) => specSheet.addRow([item.title, exportValue(formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts)), exportValue(juzPartsFa(item.juzParts))]));
+    specs.forEach((item) => specSheet.addRow([item.title, exportValue(formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts, specMeta[item.code])), exportValue(juzPartsFa(item.juzParts))]));
     specSheet.eachRow((current) => { current.alignment = { horizontal: "right", vertical: "middle", readingOrder: "rtl", wrapText: true }; });
 
     /* ---------------- شیت ۳: رکوردهای ثبت‌شده ---------------- */

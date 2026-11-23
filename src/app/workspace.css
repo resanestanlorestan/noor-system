@@ -1381,3 +1381,23 @@
 @media (max-width: 640px) { .fixed-field-edit { grid-template-columns:1fr; } }
 .fixed-field-check { display:flex !important; grid-column:1 / -1; align-items:center; gap:8px; font-size:11.5px !important; flex-direction:row; }
 .fixed-field-check input { width:auto; }
+
+/* الحاقیهٔ ۲.۲۸.۰ — ویرایشگر پویای فیلد جزئیات تخصص در /forms */
+.spec-overridden-badge { align-self:flex-start; background:#fff3d6; color:#8a6100; border:1px solid #ecd39a; border-radius:999px; padding:3px 12px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+.spec-fields-form { margin-top:10px; }
+.spec-fields-options { margin-top:12px; border:1px solid #e3e9e4; border-radius:12px; padding:12px; background:#fbfdfc; }
+.spec-fields-options .detail-section-head { margin-bottom:6px; }
+.spec-fields-options h3 { font-size:13.5px; margin:2px 0; }
+.spec-option-row { display:flex; align-items:center; gap:10px; padding:7px 6px; border-bottom:1px dashed #e7ece8; flex-wrap:wrap; }
+.spec-option-row:last-child { border-bottom:none; }
+.spec-option-index { width:22px; height:22px; border-radius:50%; background:#eaf4ed; color:#145943; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.spec-option-tools { display:flex; gap:4px; align-items:center; }
+.spec-option-tools button { border:1px solid #dfe7e1; background:#fff; border-radius:7px; padding:4px 6px; display:inline-flex; cursor:pointer; }
+.spec-option-tools button:disabled { opacity:.35; cursor:default; }
+.spec-option-label { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; font-size:11.5px; color:#5b6b60; }
+.spec-option-label input { max-width:340px; }
+.spec-option-key { font-size:10.5px; color:#8a948c; background:#f1f5f2; border-radius:6px; padding:3px 8px; white-space:nowrap; }
+.spec-fields-note { display:block; margin-top:6px; color:#7a867d; font-size:11.5px; }
+.spec-fields-actions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+.spec-reset-form { margin-top:10px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+@media (max-width: 640px) { .spec-option-label input { max-width:100%; } }

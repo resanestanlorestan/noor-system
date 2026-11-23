@@ -187,6 +187,21 @@ export const caseFieldOverrides = pgTable("case_field_overrides", {
   updatedBy: uuid("updated_by").references(() => users.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("case_field_overrides_unique").on(table.stepCode, table.fieldKey), index("case_field_overrides_step_idx").on(table.stepCode)]);
+// الحاقیهٔ ۲.۲۸.۰ — override پویای فیلد جزئیات هر تخصص (کلید پایدار = کد تخصص):
+// نوع فیلد، عنوان، راهنما، سقف انتخاب و فهرست کامل گزینه‌ها با کلیدهای پایدار؛
+// ردیف غایب = پیش‌فرض ثابت کد (specialtyDetailSpec). حتی تخصص‌های افزودهٔ پنل
+// (کد sp…) هم می‌توانند از این پس فیلد جزئیات داشته باشند.
+export const specialtyDetailOverrides = pgTable("specialty_detail_overrides", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 40 }).notNull(),
+  kind: varchar("kind", { length: 20 }).notNull().default("none").$type<"juz" | "level" | "checklist" | "writings" | "none">(),
+  label: varchar("label", { length: 200 }),
+  hint: varchar("hint", { length: 500 }),
+  maxOptions: integer("max_options"),
+  options: jsonb("options").$type<Array<{ key: string; label: string; hidden?: boolean }>>().notNull().default([]),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("specialty_detail_overrides_code_uq").on(table.code)]);
 export const activists = pgTable("quranic_activists", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").unique().references(() => users.id),

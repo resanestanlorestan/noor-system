@@ -12,6 +12,7 @@ import type { AppUser } from "@/lib/auth";
 import { getCaseForUser } from "@/lib/data";
 import { computeScore, rankLevel } from "@/lib/ranking";
 import { activityRecordKindLabels, documentTypeLabels, educationTypeLabels, formatSpecialtyDetail, sourceLabels, statusLabels, writingTypeLabels } from "@/lib/constants";
+import { loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import { isoToJalali } from "@/lib/format";
 
 const dash = "—";
@@ -65,6 +66,8 @@ export async function loadDossier(user: AppUser, caseId: string): Promise<Dossie
     db.select().from(educationRecords).where(eq(educationRecords.activistId, person.id)).orderBy(desc(educationRecords.createdAt)),
     db.select().from(workHistory).where(eq(workHistory.activistId, person.id)).orderBy(desc(workHistory.createdAt)),
   ]);
+  // الحاقیهٔ ۲.۲۸.۰ — جزئیات تخصص‌ها با تنظیمات پویای پنل مدیریت
+  const detailMeta = await loadSpecialtyDetailMeta();
 
   const counts = {
     activity: activityRows.filter((item) => item.kind === "activity").length,
@@ -83,7 +86,7 @@ export async function loadDossier(user: AppUser, caseId: string): Promise<Dossie
     person,
     specialtyTitles: specialtyRows.map((item) => item.title),
     specialtyDetailLines: specialtyRows
-      .map((item) => ({ id: String(item.id), title: item.title, detail: formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts) || "" }))
+      .map((item) => ({ id: String(item.id), title: item.title, detail: formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts, detailMeta[item.code]) || "" }))
       .filter((item) => item.detail),
     writings: writingRows.map((item) => ({ id: item.id, main: item.title, extra: [writingTypeLabels[item.workType], item.topic ? `موضوع: ${item.topic}` : null].filter(Boolean).join(" · "), kindLabel: null, period: dash })),
     provinceName: provinceRows[0]?.name ?? null, countyName: countyRows[0]?.name ?? null,

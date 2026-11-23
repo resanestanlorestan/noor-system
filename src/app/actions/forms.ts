@@ -7,13 +7,15 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { formAnswers, formDefinitions, formDefinitionVersions, specialties } from "@/db/schema";
+import { formAnswers, formDefinitions, formDefinitionVersions, specialties, specialtyDetailOverrides } from "@/db/schema";
 import { audit, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { field } from "@/lib/case-input";
 import { faNumber } from "@/lib/format";
 import { stashFlash } from "@/lib/flash";
 import { specialtyUsageParts } from "@/lib/specialty-usage";
+import { defaultSpecialtyDetailMeta, loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
+import { specialtyDetailKindLabels, type SpecialtyDetailMeta } from "@/lib/constants";
 import type { ActionState } from "@/lib/action-state";
 import { newFieldKey, newOptionKey, validateFormConfig, type FormConfig } from "@/lib/form-config";
 
@@ -27,7 +29,8 @@ async function manageGuard(): Promise<{ user: Awaited<ReturnType<typeof requireU
 
 export type SpecialtyRow = typeof specialties.$inferSelect;
 
-/** فهرست تخصص‌ها با ترتیب تعریف‌شده + وضعیت فرم پویای هر یک */
+/** فهرست تخصص‌ها با ترتیب تعریف‌شده + وضعیت فرم پویای هر یک + متای پویای
+ *  فیلد جزئیات هر تخصص (الحاقیهٔ ۲.۲۸.۰) برای ویرایشگر پنل */
 export async function listSpecialtiesForForms() {
   const user = await requireUser();
   if (!(await can(user, "forms.manage"))) return null;
@@ -39,7 +42,11 @@ export async function listSpecialtiesForForms() {
   const usage = await db.select({ specialtyId: formAnswers.specialtyId, n: count() }).from(formAnswers).groupBy(formAnswers.specialtyId);
   const usageMap = new Map(usage.filter((row) => row.specialtyId !== null).map((row) => [row.specialtyId as number, row.n]));
   const defMap = new Map(defs.map((row) => [row.entityId, row]));
-  return { rows, defMap, usageMap };
+  // الحاقیهٔ ۲.۲۸.۰ — متای مؤثر فیلد جزئیات + زمان آخرین ذخیرهٔ هر override
+  const detailMeta = await loadSpecialtyDetailMeta();
+  const overrideRows = await db.select({ code: specialtyDetailOverrides.code, updatedAt: specialtyDetailOverrides.updatedAt }).from(specialtyDetailOverrides);
+  const detailSavedAt = Object.fromEntries(overrideRows.map((row) => [row.code, row.updatedAt.toISOString()]));
+  return { rows, defMap, usageMap, detailMeta, detailSavedAt };
 }
 
 /** افزودن تخصص از داشبورد (نام + توضیح) با کد یکتا */
@@ -133,12 +140,14 @@ export async function deleteSpecialtyAction(data: FormData) {
   if ("error" in guard) return fail(guard.error);
   const id = Number(field(data, "specialtyId", 10));
   if (!id) return fail("تخصص معتبر نیست.");
-  const [specialty] = await db.select({ id: specialties.id, title: specialties.title }).from(specialties).where(eq(specialties.id, id)).limit(1);
+  const [specialty] = await db.select({ id: specialties.id, title: specialties.title, code: specialties.code }).from(specialties).where(eq(specialties.id, id)).limit(1);
   if (!specialty) return fail("تخصص پیدا نشد؛ ممکن است پیش‌تر حذف شده باشد.");
   const parts = await specialtyUsageParts(id);
   if (parts) return fail(`حذف تخصص «${specialty.title}» ممکن نیست؛ این تخصص در ${parts} استفاده شده است. می‌توانید از دکمهٔ «غیرفعال» استفاده کنید تا فقط انتخاب جدید بسته شود و سوابق دست‌نخورده بمانند.`);
   try { await db.delete(specialties).where(eq(specialties.id, id)); }
   catch { return fail("حذف تخصص انجام نشد؛ دوباره تلاش کنید."); }
+  // الحاقیهٔ ۲.۲۸.۰ — تنظیم پویای فیلد جزئیاتِ تخصص حذف‌شده هم پاک می‌شود
+  await db.delete(specialtyDetailOverrides).where(eq(specialtyDetailOverrides.code, specialty.code));
   await audit(guard.user.id, "delete_specialty", "specialty", String(id), specialty.title);
   revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings"); revalidatePath("/cases"); revalidatePath("/register");
   return redirect("/forms?m=" + stashFlash(`تخصص «${specialty.title}» از فهرست حذف شد.`));
@@ -253,4 +262,77 @@ export async function loadAnswersForCase(applicationId: string, definitionIds: n
   if (!definitionIds.length) return new Map<number, { version: number; answers: Record<string, unknown> }>();
   const rows = await db.select({ definitionId: formAnswers.definitionId, version: formAnswers.version, answers: formAnswers.answers }).from(formAnswers).where(and(eq(formAnswers.applicationId, applicationId), inArray(formAnswers.definitionId, definitionIds)));
   return new Map(rows.map((row) => [row.definitionId, { version: row.version, answers: (row.answers || {}) as Record<string, unknown> }]));
+}
+
+/* ---------------- الحاقیهٔ ۲.۲۸.۰ — مدیریت پویای فیلد جزئیات تخصص ----------------
+ * همهٔ فیلدهای «ثابت» فهرست تخصص‌ها — نوع فیلد، عنوان، راهنما، سقف انتخاب و
+ * تک‌تک گزینه‌ها — از همین اکشن‌ها بدون هیچ تغییر کدی مدیریت می‌شوند. کلیدهای
+ * گزینه پایدار می‌مانند (الگوی ۲.۱۲.۰): ویرایش فقط برچسب/نوع/ترتیب را عوض
+ * می‌کند و پاسخ‌های تاریخی پرونده‌ها بدون مهاجرت خوانده می‌شوند. گزینهٔ
+ * مخفی‌شده از فرم تازه حذف می‌شود ولی برای نمایش دادهٔ قدیمی معتبر می‌ماند. */
+
+const DETAIL_OPTION_KEY_RE = /^[a-z0-9_]{1,40}$/;
+const DETAIL_KINDS = Object.keys(specialtyDetailKindLabels) as Array<keyof typeof specialtyDetailKindLabels>;
+
+export type SpecialtyDetailEditorState = { kind: SpecialtyDetailMeta["kind"]; label: string; hint: string; maxOptions: string; options: Array<{ key: string; label: string; hidden?: boolean }> };
+
+/** ذخیرهٔ تنظیم پویای فیلد جزئیات یک تخصص (کد تخصص = کلید پایدار). */
+export async function saveSpecialtyDetailAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  const guard = await manageGuard();
+  if ("error" in guard) return { error: guard.error };
+  const code = field(data, "code", 40);
+  const kind = field(data, "kind", 20);
+  const label = field(data, "label", 200);
+  const hint = field(data, "hint", 500);
+  const maxOptionsRaw = field(data, "maxOptions", 10);
+  if (!code || !(DETAIL_KINDS as string[]).includes(kind)) return { error: "کد تخصص یا نوع فیلد معتبر نیست." };
+  const kindValue = kind as SpecialtyDetailMeta["kind"];
+  let maxOptions: number | null = null;
+  if (maxOptionsRaw) {
+    if (!/^\d{1,2}$/.test(maxOptionsRaw) || Number(maxOptionsRaw) < 1 || Number(maxOptionsRaw) > 60) return { error: "سقف انتخاب‌ها باید عددی میان ۱ تا ۶۰ باشد." };
+    maxOptions = Number(maxOptionsRaw);
+  }
+  if (kindValue !== "checklist") maxOptions = null; // سقف فقط برای چک‌لیست معنا دارد
+  let options: Array<{ key: string; label: string; hidden?: boolean }> = [];
+  try {
+    const parsed: unknown = JSON.parse(field(data, "options", 20000));
+    if (!Array.isArray(parsed) || parsed.length > 80) throw new Error("bad");
+    options = parsed.map((item) => {
+      if (typeof item !== "object" || item === null) throw new Error("bad");
+      const record = item as Record<string, unknown>;
+      const key = String(record.key || "");
+      const optionLabel = String(record.label || "").trim();
+      if (!DETAIL_OPTION_KEY_RE.test(key) || optionLabel.length < 1 || optionLabel.length > 100) throw new Error("bad");
+      return record.hidden ? { key, label: optionLabel, hidden: true } : { key, label: optionLabel };
+    });
+    if (new Set(options.map((option) => option.key)).size !== options.length) throw new Error("bad");
+  } catch {
+    return { error: "فهرست گزینه‌های ارسالی معتبر نیست؛ برچسب‌ها و کلیدها را بررسی کنید." };
+  }
+  try {
+    await db.insert(specialtyDetailOverrides).values({ code, kind: kindValue, label: label || null, hint: hint || null, maxOptions, options, updatedBy: guard.user.id })
+      .onConflictDoUpdate({ target: specialtyDetailOverrides.code, set: { kind: kindValue, label: label || null, hint: hint || null, maxOptions, options, updatedBy: guard.user.id, updatedAt: new Date() } });
+    await audit(guard.user.id, "edit_specialty_detail", "specialty", code, `${kindValue} — ${options.length} گزینه`);
+    revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings"); revalidatePath("/cases"); revalidatePath("/register");
+    return { success: "تنظیمات فیلد جزئیات ذخیره شد و در همهٔ بخش‌های سامانه اعمال گردید." };
+  } catch {
+    return { error: "ذخیرهٔ تنظیمات فیلد جزئیات انجام نشد؛ دوباره تلاش کنید." };
+  }
+}
+
+/** بازنشانی فیلد جزئیات تخصص به پیش‌فرض ثابت کد (حذف ردیف override). */
+export async function resetSpecialtyDetailAction(data: FormData): Promise<ActionState> {
+  const guard = await manageGuard();
+  if ("error" in guard) return { error: guard.error };
+  const code = field(data, "code", 40);
+  if (!code) return { error: "کد تخصص معتبر نیست." };
+  const resolved = defaultSpecialtyDetailMeta(code);
+  try {
+    await db.delete(specialtyDetailOverrides).where(eq(specialtyDetailOverrides.code, code));
+    await audit(guard.user.id, "reset_specialty_detail", "specialty", code, resolved ? "بازنشانی به پیش‌فرض کد" : "حذف تنظیم تخصص بدون پیش‌فرض");
+    revalidatePath("/forms"); revalidatePath("/steps"); revalidatePath("/settings"); revalidatePath("/cases"); revalidatePath("/register");
+    return { success: resolved ? "فیلد جزئیات به پیش‌فرض سامانه بازگشت." : "تنظیم فیلد جزئیات حذف شد (این تخصص فیلد جزئیات ندارد)." };
+  } catch {
+    return { error: "بازنشانی انجام نشد؛ دوباره تلاش کنید." };
+  }
 }

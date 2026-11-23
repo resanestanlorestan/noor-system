@@ -6,7 +6,7 @@
 // Server Action endpoint.
 
 import { jalaliToIso, normalizeText } from "@/lib/format";
-import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, normalizeJuzParts, recitationLevelOptions, specialtyDetailSpec, UNIVERSITY_TYPE_OPTIONS, writingTypeLabels, type EducationType, type WritingType } from "@/lib/constants";
+import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, normalizeJuzParts, UNIVERSITY_TYPE_OPTIONS, writingTypeLabels, defaultSpecialtyDetailMeta, specialtySelectLabels, type EducationType, type SpecialtyDetailMeta, type WritingType } from "@/lib/constants";
 
 export const field = (data: FormData, key: string, max = 200) => normalizeText(String(data.get(key) || "")).slice(0, max);
 export const numeric = (value: string) => /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null;
@@ -56,8 +56,11 @@ export function parseEducationInput(data: FormData): Array<{ type: EducationType
  *  memorized part numbers (الحاقیهٔ ۲.۱۳.۰), reciter level ("4".."7") and the
  *  checklist specialties. Unknown codes, values outside the spec, a mismatched
  *  juz-part count or an empty checklist abort the save. Author works use
- *  parseWritingsInput. */
-export function parseSpecialtyDetailsInput(data: FormData): Array<{ code: string; value: string | null; options: string[] | null; juz: string | null }> {
+ *  parseWritingsInput.
+ *  الحاقیهٔ ۲.۲۸.۰ — پارامتر اختیاری detailMeta: نوع و گزینه‌های مجاز از
+ *  تنظیمات پویای پنل مدیریت می‌آید؛ کلیدهای گزینه پایدار می‌مانند و گزینه‌های
+ *  مخفی‌شده برای بازذخیرهٔ دادهٔ قدیمی همچنان معتبرند (فقط از فرم حذف شده‌اند). */
+export function parseSpecialtyDetailsInput(data: FormData, detailMeta?: Record<string, SpecialtyDetailMeta>): Array<{ code: string; value: string | null; options: string[] | null; juz: string | null }> {
   const raw = String(data.get("specialtyDetails") || "").slice(0, 20000);
   if (!raw) return [];
   let parsed: unknown;
@@ -69,11 +72,11 @@ export function parseSpecialtyDetailsInput(data: FormData): Array<{ code: string
     const record = item as Record<string, unknown>;
     const code = String(record.code || "");
     if (!code) continue;
-    const spec = specialtyDetailSpec[code];
+    const spec = detailMeta?.[code] ?? defaultSpecialtyDetailMeta(code);
     if (!spec || spec.kind === "none" || spec.kind === "writings") throw new Error("invalid-specialty-details");
     if (spec.kind === "juz" || spec.kind === "level") {
       const value = String(record.value || "");
-      const allowed = spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions;
+      const allowed = specialtySelectLabels(detailMeta?.[code], spec.kind);
       if (!(value in allowed)) throw new Error("invalid-specialty-details");
       // الحاقیهٔ ۲.۱۳.۰ — شمارهٔ دقیق جزءهای حفظ: با میزان اعلام‌شده باید هم‌خوان باشد
       let juz: string | null = null;
@@ -85,7 +88,9 @@ export function parseSpecialtyDetailsInput(data: FormData): Array<{ code: string
       rows.push({ code, value, options: null, juz });
       continue;
     }
-    const specOptions = spec.options ?? {};
+    // گزینه‌های مجاز: همهٔ گزینه‌های متای مؤثر (حتی مخفی‌شده) تا دادهٔ قدیمی
+    // بدون دست‌زدن مدیر بازذخیره شود؛ کلید ناشناخته هرگز پذیرفته نمی‌شود
+    const specOptions = Object.fromEntries(spec.options.map((option) => [option.key, true as const]));
     const rawOptions = Array.isArray(record.options) ? record.options : [];
     const options = [...new Set(rawOptions.map((option) => String(option)).filter((option) => option in specOptions))];
     if (!options.length) throw new Error("invalid-specialty-details");

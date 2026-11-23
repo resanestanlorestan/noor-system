@@ -21,6 +21,8 @@ export const auditActionLabels: Record<string, string> = {
   // الحاقیهٔ ۲.۲۳.۰ — برچسب‌های ممیزی فرم‌ساز پویا و مدیریت تخصص‌ها
   form_draft_save: "ذخیرهٔ پیش‌نویس فرم پویا", form_publish: "انتشار نسخهٔ تازهٔ فرم پویا", form_disable: "غیرفعال‌سازی فرم پویا", form_enable: "فعال‌سازی مجدد فرم پویا", form_delete: "حذف فرم پویا",
   specialty_meta_edit: "ویرایش نام/توضیح تخصص", specialty_toggle: "فعال/غیرفعال‌سازی تخصص", specialty_reorder: "تغییر ترتیب تخصص‌ها",
+  // الحاقیهٔ ۲.۲۸.۰ — ممیزی ویرایش پویای فیلدهای جزئیات تخصص‌ها
+  edit_specialty_detail: "ویرایش فیلدهای جزئیات تخصص", reset_specialty_detail: "بازنشانی فیلدهای جزئیات تخصص",
   save_form_answers: "ذخیرهٔ پاسخ‌های فرم پویا پرونده", upload_form_file: "بارگذاری فایل فیلد پویا",
   export_case_list: "خروجی فهرست پرونده‌ها",
   // الحاقیهٔ ۲.۲۷.۰ — خروجی اکسل کامل تک‌پرونده
@@ -168,30 +170,121 @@ export const specialtyDetailSpec: Record<string, { kind: SpecialtyDetailKind; op
   author: { kind: "writings", hint: "کتاب یا مقاله‌های خود را با نام و موضوع ثبت کنید." },
   researcher: { kind: "none" }, other: { kind: "none" },
 };
-/** Human-readable one-line summary of a specialty detail, shared by the case
- *  detail page, the printable dossier and (later) the Excel export.
- *  الحاقیهٔ ۲.۱۲.۰: کلیدهای حذف‌شده از فهرست‌های انتخاب (قصه‌های قرآنی، علوم
- *  قرآنی و…) با برچسب‌های legacy نمایش داده می‌شوند تا دادهٔ قدیمی گم نشود. */
-export function formatSpecialtyDetail(code: string, detailValue: string | null, detailOptions: string[] | null, juzParts?: string | null): string | null {
+
+/* --------- الحاقیهٔ ۲.۲۸.۰ — متای مؤثر فیلد جزئیات تخصص (پویا) ---------
+ * مدیر از پنل مدیریت تخصص‌ها می‌تواند نوع فیلد، عنوان، راهنما، حداکثر انتخاب
+ * و تک‌تک گزینه‌ها (برچسب، مخفی‌سازی، افزودن، حذف، ترتیب) را ویرایش کند؛ حتی
+ * برای تخصص‌هایی که از ابتدا فیلد جزئیات نداشته‌اند. کلیدهای ذخیره‌سازی
+ * (کلیدهای گزینه و اعداد) هرگز تغییر نمی‌کنند — فقط لایهٔ نمایش/انتخاب عوض
+ * می‌شود تا دادهٔ تاریخی پرونده‌ها بدون مهاجرت سر جایش بماند. */
+export type SpecialtyDetailOption = { key: string; label: string; hidden?: boolean };
+export type SpecialtyDetailMeta = {
+  kind: SpecialtyDetailKind;
+  /** عنوان فیلد جزئیات در فرم و خروجی‌ها (null = پیش‌فرض بر اساس نوع) */
+  label: string | null;
+  hint: string | null;
+  /** سقف انتخاب گزینه‌ها برای checklist (null = بدون سقف) */
+  maxOptions: number | null;
+  /** فهرست کامل گزینه‌ها با کلید پایدار؛ hidden یعنی از فرم حذف شده ولی برای
+   *  نمایش دادهٔ قدیمی معتبر است */
+  options: SpecialtyDetailOption[];
+  /** true یعنی مدیر برای این کد تنظیم ذخیره‌شده دارد (نشان «ویرایش‌شده») */
+  overridden?: boolean;
+};
+/** سقف پیش‌فرض انتخاب‌ها (هم‌خوان با راهنمای فعلی فرم‌ها). */
+export const DEFAULT_SPECIALTY_MAX_OPTIONS: Record<string, number> = { trainer: 9, teacher: 7 };
+/** برچسب فارسی انواع فیلد جزئیات برای پنل مدیریت. */
+export const specialtyDetailKindLabels: Record<SpecialtyDetailKind, string> = {
+  none: "بدون فیلد جزئیات", juz: "میزان حفظ (تک‌انتخابی با انتخاب اجزا)", level: "سطح (تک‌انتخابی)",
+  checklist: "چندگزینه‌ای (چک‌لیست)", writings: "آثار (رکوردهای جداگانه)",
+};
+/** متای پیش‌فرض (ثابت کد) یک کد تخصص — هم سمت سرور و هم سمت کلاینت. */
+export function defaultSpecialtyDetailMeta(code: string): SpecialtyDetailMeta | undefined {
   const spec = specialtyDetailSpec[code];
-  if (!spec) return null;
-  if (spec.kind === "juz" || spec.kind === "level") {
-    const options = spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions;
-    if (!detailValue || !(detailValue in options)) return null;
+  if (!spec) return undefined;
+  const optionSource = spec.kind === "juz" ? hafizJuzOptions : spec.kind === "level" ? recitationLevelOptions : spec.options;
+  return {
+    kind: spec.kind,
+    label: spec.kind === "juz" ? "میزان حفظ" : spec.kind === "level" ? "سطح قرائت" : null,
+    hint: spec.hint ?? null,
+    maxOptions: DEFAULT_SPECIALTY_MAX_OPTIONS[code] ?? null,
+    options: optionSource ? Object.entries(optionSource).map(([key, label]) => ({ key, label })) : [],
+  };
+}
+/** نقشهٔ برچسب گزینه‌های تک‌انتخابی برای «نمایش» دادهٔ ذخیره‌شده: گزینه‌های
+ *  متای مدیریتی (وقتی نوع همان است) + fallback به نقشهٔ ثابت برای کلیدهای قدیمی. */
+export function specialtySelectLabels(meta: SpecialtyDetailMeta | undefined, kind: "juz" | "level"): Record<string, string> {
+  const fallback = kind === "juz" ? hafizJuzOptions : recitationLevelOptions;
+  if (meta && meta.kind === kind && meta.options.length) {
+    return { ...fallback, ...Object.fromEntries(meta.options.map((option) => [option.key, option.label])) };
+  }
+  return fallback;
+}
+/** گزینه‌های «قابل انتخاب» در فرم ویزارد: فقط غیرمخفی‌های متای مؤثر. */
+export function selectableSpecialtyOptions(code: string, meta: SpecialtyDetailMeta | undefined): Record<string, string> {
+  const spec = specialtyDetailSpec[code];
+  const kind = meta?.kind ?? spec?.kind;
+  if (!kind || kind === "none" || kind === "writings") return {};
+  if (meta?.options.length) {
+    return Object.fromEntries(meta.options.filter((option) => !option.hidden).map((option) => [option.key, option.label]));
+  }
+  const fallback = kind === "juz" ? hafizJuzOptions : kind === "level" ? recitationLevelOptions : spec?.options;
+  return fallback ? { ...fallback } : {};
+}
+/** عنوان مؤثر فیلد جزئیات در فرم و خروجی‌ها. */
+export function specialtyDetailFieldLabel(code: string, meta: SpecialtyDetailMeta | undefined): string {
+  if (meta?.label) return meta.label;
+  const kind = meta?.kind ?? specialtyDetailSpec[code]?.kind;
+  return kind === "juz" ? "میزان حفظ" : kind === "level" ? "سطح قرائت" : "جزئیات";
+}
+/** Human-readable one-line summary of a specialty detail, shared by the case
+ *  detail page, the printable dossier and the Excel export.
+ *  الحاقیهٔ ۲.۱۲.۰: کلیدهای حذف‌شده از فهرست‌های انتخاب (قصه‌های قرآنی، علوم
+ *  قرآنی و…) با برچسب‌های legacy نمایش داده می‌شوند تا دادهٔ قدیمی گم نشود.
+ *  الحاقیهٔ ۲.۲۸.۰: پارامتر اختیاری meta برچسب‌ها/نوع را از تنظیمات پنل مدیریت
+ *  می‌خواند؛ بدون meta رفتار ثابت قبلی حفظ می‌شود و در هر دو حالت، دادهٔ قدیمی
+ *  با شکل متفاوت (تک‌انتخابی ↔ چک‌لیست) هم خوانده می‌شود تا هیچ سوابقی کور نشود. */
+export function formatSpecialtyDetail(code: string, detailValue: string | null, detailOptions: string[] | null, juzParts?: string | null, meta?: SpecialtyDetailMeta): string | null {
+  const spec = specialtyDetailSpec[code];
+  const kind = meta?.kind ?? spec?.kind;
+  if (!kind || kind === "none" || kind === "writings") return null;
+  const checklistLabels = () => {
+    const base = spec?.options ?? {};
+    if (meta && meta.kind === "checklist" && meta.options.length) {
+      return { ...base, ...Object.fromEntries(meta.options.map((option) => [option.key, option.label])) };
+    }
+    return base;
+  };
+  const checklistText = (keys: string[]) => {
+    const legacy = code === "trainer" ? legacyTeacherSubjectLabels : code === "teacher" ? legacyModarresFieldLabels : {};
+    const labels = checklistLabels();
+    const chosen = keys.map((key) => labels[key] || legacy[key]).filter(Boolean);
+    return chosen.length ? chosen.join("، ") : null;
+  };
+  const selectText = (selectKind: "juz" | "level", value: string) => {
+    const options = specialtySelectLabels(meta, selectKind);
+    if (!(value in options)) return null;
     // الحاقیهٔ ۲.۱۳.۰ — شمارهٔ دقیق جزءهای حفظ‌شده کنار میزان حفظ نمایش داده می‌شود
     // (فقط وقتی تعداد اجزا با میزان اعلام‌شده هم‌خوان است)
-    if (spec.kind === "juz" && juzParts) {
+    if (selectKind === "juz" && juzParts) {
       const parsed = parseJuzNumbers(juzParts);
-      const matches = parsed && (detailValue === "complete" ? parsed.length === 30 : parsed.length === Number(detailValue));
-      if (matches) return `${options[detailValue]} (${juzPartsFa(juzParts)})`;
+      const matches = parsed && (value === "complete" ? parsed.length === 30 : parsed.length === Number(value));
+      if (matches) return `${options[value]} (${juzPartsFa(juzParts)})`;
     }
-    return options[detailValue];
+    return options[value];
+  };
+  if (kind === "juz" || kind === "level") {
+    if (detailValue) {
+      const text = selectText(kind, detailValue);
+      if (text) return text;
+    }
+    // fallback شکل داده — سوابق قدیمی چک‌لیستی پس از تغییر نوع کور نمی‌شوند
+    if (detailOptions?.length) return checklistText(detailOptions);
+    return null;
   }
-  if (spec.kind === "checklist" && spec.options) {
-    const legacy = code === "trainer" ? legacyTeacherSubjectLabels : code === "teacher" ? legacyModarresFieldLabels : {};
-    const chosen = (detailOptions || []).map((key) => spec.options![key] || legacy[key]).filter(Boolean);
-    return chosen.length ? chosen.join("، ") : null;
-  }
+  if (detailOptions?.length) return checklistText(detailOptions);
+  // fallback شکل داده — سوابق قدیمی تک‌انتخابی پس از تغییر نوع به چک‌لیست
+  if (detailValue) return selectText("juz", detailValue) ?? selectText("level", detailValue);
   return null;
 }
 

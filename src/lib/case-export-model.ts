@@ -24,8 +24,9 @@ import { isFieldVisible, type FormAnswers, type FormConfig, type FormField } fro
 import { isoToJalali } from "@/lib/format";
 import {
   activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions,
-  formatSpecialtyDetail, memorizationCertTypeOptions, sourceLabels, statusLabels,
+  formatSpecialtyDetail, memorizationCertTypeOptions, sourceLabels, statusLabels, type SpecialtyDetailMeta,
 } from "@/lib/constants";
+import { loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import type { ExportCaseRow, ExportDetails } from "@/lib/case-search";
 
 /** گارد تزریق فرمول (CSV Injection) — هم‌منظور با مسیر فهرست. */
@@ -126,9 +127,10 @@ function genderFa(gender: string | null | undefined): string {
   return gender === "female" ? "زن" : gender === "male" ? "مرد" : "—";
 }
 
-/** جزئیات قالب‌بندی‌شدهٔ هر تخصص: «عنوان: جزئیات» یا «عنوان». */
-function specialtyLine(item: ExportDetails["specialtyDetails"][number]): string {
-  const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts);
+/** جزئیات قالب‌بندی‌شدهٔ هر تخصص: «عنوان: جزئیات» یا «عنوان» — برچسب گزینه‌ها
+ *  از تنظیمات پویای پنل مدیریت تخصص‌ها (الحاقیهٔ ۲.۲۸.۰). */
+function specialtyLine(item: ExportDetails["specialtyDetails"][number], meta?: SpecialtyDetailMeta): string {
+  const detail = formatSpecialtyDetail(item.code, item.detailValue, item.detailOptions, item.juzParts, meta);
   return detail ? `${item.title}: ${detail}` : item.title;
 }
 
@@ -204,7 +206,7 @@ export type FullInfoSheet = { header: string[]; widths: number[]; rows: Array<Ar
  *  فیلدهای سفارشی مراحل فعال. برچسب فیلدهای ثابت از override مدیریت مراحل
  *  می‌آید (الحاقیهٔ ۲.۲۶.۰) و کد ملی برای مدیران کامل رمزگشایی می‌شود. */
 export async function buildFullInfoSheet(rows: ExportCaseRow[], details: ExportDetails, fullNationalIds: Map<string, string>): Promise<FullInfoSheet> {
-  const [meta, stepForms] = await Promise.all([loadCaseFieldMeta(), loadPublishedStepForms()]);
+  const [meta, stepForms, specMeta] = await Promise.all([loadCaseFieldMeta(), loadPublishedStepForms(), loadSpecialtyDetailMeta()]);
   const answersByApp = await loadStepAnswers(rows.map((row) => row.id), stepForms);
   // نام کارشناس مسئول هر پرونده (الحاقیهٔ ۲.۲۷.۰ — ستون کارشناس مسئول)
   const expertIds = [...new Set(rows.map((row) => row.assignedExpertId).filter((id): id is string => Boolean(id)))];
@@ -238,9 +240,9 @@ export async function buildFullInfoSheet(rows: ExportCaseRow[], details: ExportD
       expertName: row.assignedExpertId ? expertById.get(row.assignedExpertId) ?? null : null,
       universityRecord: details.education.find((item) => item.activistId === row.activistId && item.type === "university") || null,
       seminaryRecord: details.education.find((item) => item.activistId === row.activistId && item.type === "seminary") || null,
-      specialtyLines: specRows.map(specialtyLine),
-      teachLine: specRows.filter((item) => item.code === "teacher" || item.code === "trainer").map(specialtyLine).join(" | "),
-      memorizeLine: specRows.find((item) => item.code === "memorizer") ? specialtyLine(specRows.find((item) => item.code === "memorizer")!) : "",
+      specialtyLines: specRows.map((item) => specialtyLine(item, specMeta[item.code])),
+      teachLine: specRows.filter((item) => item.code === "teacher" || item.code === "trainer").map((item) => specialtyLine(item, specMeta[item.code])).join(" | "),
+      memorizeLine: specRows.find((item) => item.code === "memorizer") ? specialtyLine(specRows.find((item) => item.code === "memorizer")!, specMeta[specRows.find((item) => item.code === "memorizer")!.code]) : "",
       documentCount: details.documents.filter((item) => item.applicationId === row.id).length,
     };
     return columns.map((column) => column.key === "row" ? index + 1 : column.resolve(ctx));

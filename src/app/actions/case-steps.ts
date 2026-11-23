@@ -14,7 +14,8 @@ import { requireUser } from "@/lib/auth";
 import { getCaseForUser, isManager, scopeCondition } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { jalaliToIso, normalizeDigits, validIdCardNumber, validNationalId, validPostalCode } from "@/lib/format";
-import { memorizationCertTypeOptions, specialtyDetailSpec } from "@/lib/constants";
+import { memorizationCertTypeOptions } from "@/lib/constants";
+import { defaultSpecialtyDetailMeta, loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import { protectNationalId } from "@/lib/local-secrets";
 import { field, numeric, parseActivityRecordsInput, parseCoursesInput, parseEducationInput, parseSpecialtyCertKeysInput, parseSpecialtyDetailsInput, parseStagedDocsInput, parseWritingsInput, parseWorkHistoryInput } from "@/lib/case-input";
 import { privateDir } from "@/lib/local-secrets";
@@ -403,10 +404,13 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
   const previousSpecialtyIds = new Set((await db.select({ specialtyId: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id))).map((item) => item.specialtyId));
   const blockedInactive = found.filter((item) => !item.active && !previousSpecialtyIds.has(item.id));
   if (blockedInactive.length) return { error: `این تخصص‌ها غیرفعال شده‌اند و قابل انتخاب جدید نیستند: ${blockedInactive.map((item) => item.title).join("، ")}` };
+  // الحاقیهٔ ۲.۲۸.۰ — اعتبارسنجی جزئیات با تنظیمات پویای فیلدهای تخصص‌ها
+  // (نوع/گزینه‌های مؤثر از پنل مدیریت؛ کلیدهای ذخیره‌سازی پایدار می‌مانند)
+  const detailMeta = await loadSpecialtyDetailMeta();
   let detailRows: ReturnType<typeof parseSpecialtyDetailsInput>;
   let writingRows: ReturnType<typeof parseWritingsInput>;
   try {
-    detailRows = parseSpecialtyDetailsInput(data);
+    detailRows = parseSpecialtyDetailsInput(data, detailMeta);
     writingRows = parseWritingsInput(data);
   } catch {
     return { error: "جزئیات تخصص‌ها یا آثار مؤلف ارسالی معتبر نیست؛ مقادیر هر تخصص را بررسی کنید." };
@@ -415,7 +419,7 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
   if (detailRows.some((item) => !chosenCodes.has(item.code))) return { error: "جزئیات برای تخصصی ارسال شده که انتخاب نشده است." };
   const detailCodes = new Set(detailRows.map((item) => item.code));
   const incomplete = found.filter((item) => {
-    const spec = specialtyDetailSpec[item.code];
+    const spec = detailMeta[item.code] ?? defaultSpecialtyDetailMeta(item.code);
     return spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist") && !detailCodes.has(item.code);
   });
   if (incomplete.length) return { error: `جزئیات این تخصص‌ها کامل نشده است: ${incomplete.map((item) => item.title).join("، ")}` };

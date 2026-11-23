@@ -10,6 +10,7 @@ import { can } from "@/lib/permissions";
 import { faDate, faNumber, isoToJalali } from "@/lib/format";
 import { activityRecordKindLabels, courseFieldOptions, documentTypeLabels, educationTypeLabels, statusLabels, writingTypeLabels } from "@/lib/constants";
 import { collectReadinessIssues, computeCaseSteps, loadCaseStepFacts, readinessFlagSections } from "@/lib/case-steps";
+import { loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import { resolvedCaseField } from "@/lib/case-field-catalog";
 import { CaseStepsBar } from "@/components/case-progress";
 import { IdentityStepForm, LocationStepForm, SpecialtiesStepForm } from "@/components/case-steps-forms";
@@ -104,7 +105,7 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
   }
 
   if (requested.key === "specialties") {
-    const [allSpecialties, selected, detailRows, writingRows, workRows, courseRows, activityRows] = await Promise.all([
+    const [allSpecialties, selected, detailRows, writingRows, workRows, courseRows, activityRows, detailMeta] = await Promise.all([
       db.select().from(specialties).orderBy(specialties.id),
       db.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, person.id)),
       db.select({ specialtyId: activistSpecialtyDetails.specialtyId, code: specialties.code, detailValue: activistSpecialtyDetails.detailValue, detailOptions: activistSpecialtyDetails.detailOptions, juzParts: activistSpecialtyDetails.juzParts }).from(activistSpecialtyDetails).innerJoin(specialties, eq(activistSpecialtyDetails.specialtyId, specialties.id)).where(eq(activistSpecialtyDetails.activistId, person.id)),
@@ -113,6 +114,8 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
       // الحاقیهٔ ۲.۱۴.۰ — دوره‌ها و سوابق فعالیت ثبت‌شده برای نمایش در فهرست موجود
       db.select().from(educationalCourses).where(eq(educationalCourses.activistId, person.id)).orderBy(educationalCourses.createdAt),
       db.select().from(activityRecords).where(eq(activityRecords.activistId, person.id)).orderBy(activityRecords.createdAt),
+      // الحاقیهٔ ۲.۲۸.۰ — متای پویای فیلدهای جزئیات تخصص‌ها از پنل مدیریت
+      loadSpecialtyDetailMeta(),
     ]);
     // الحاقیهٔ ۲.۲۳.۰ — فرم‌های پویای منتشرشده برای تخصص‌های «انتخاب‌شدهٔ» این پرونده
     // به همراه پاسخ‌های ذخیره‌شده؛ فرم غیرفعال‌شده در ویرایش نمایش داده نمی‌شود ولی
@@ -124,7 +127,7 @@ export default async function CaseStepPage({ params, searchParams }: { params: P
       const saved = dynAnswerRows.get(item.id);
       return { specialtyId: item.entityId, version: item.version, config: item.publishedConfig as FormConfig, saved: (saved?.answers || {}) as FormAnswers, title: allSpecialties.find((sp) => sp.id === item.entityId)?.title || "" };
     });
-    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} dynForms={dynForms} flagSections={checkMode ? readinessFlagSections(requested) : []} meta={facts.fieldMeta} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section>{extrasFor(requested.definitionId)}</>;
+    return <>{head}<section className="ws-panel form-panel">{checkMode && <ReadinessBanner stepNumber={stepNumber} items={requested.missing} />}{checkMode && requested.missing.length ? <FlagFocus /> : null}<SpecialtiesStepForm caseId={id} specialties={allSpecialties} needsChangeReason={nonActivistEditor} dynForms={dynForms} flagSections={checkMode ? readinessFlagSections(requested) : []} meta={facts.fieldMeta} detailMeta={detailMeta} defaults={{ specialtyIds: selected.map((item) => item.id), specialtyDetails: detailRows.map((item) => ({ specialtyId: item.specialtyId, code: item.code, detailValue: item.detailValue, detailOptions: item.detailOptions, juzParts: item.juzParts })), writings: writingRows.map((item) => ({ id: item.id, workTypeLabel: writingTypeLabels[item.workType], title: item.title, topic: item.topic })), workHistory: workRows.map((item) => ({ id: item.id, title: item.title, employer: item.employer, position: item.position, startDate: item.startDate, endDate: item.endDate, description: item.description })), courses: courseRows.map((item) => ({ id: item.id, title: item.title, provider: item.provider, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, completedDateLabel: item.completedDate ? faDigitsLocal(isoToJalali(item.completedDate)) : null, hours: item.hours })), activities: activityRows.map((item) => ({ id: item.id, kindLabel: activityRecordKindLabels[item.kind], title: item.title, organization: item.organization, position: item.position, fieldLabel: item.field && item.field in courseFieldOptions ? courseFieldOptions[item.field as keyof typeof courseFieldOptions] : null, periodLabel: [item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" ") || null, description: item.description })), job: person.job || "", notes: person.notes || "" }} /></section>{extrasFor(requested.definitionId)}</>;
   }
 
   if (requested.key === "documents") {

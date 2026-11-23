@@ -18,7 +18,8 @@ import { requireUser } from "@/lib/auth";
 import { getCaseForUser, isManager, scopeCondition } from "@/lib/data";
 import { can } from "@/lib/permissions";
 import { jalaliToIso, normalizeDigits, normalizeText, validIdCardNumber, validNationalId, validPostalCode } from "@/lib/format";
-import { statusLabels, specialtyDetailSpec, type AppStatus } from "@/lib/constants";
+import { statusLabels, type AppStatus } from "@/lib/constants";
+import { defaultSpecialtyDetailMeta, loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import { protectNationalId } from "@/lib/local-secrets";
 import { field, parseEducationInput, parseSpecialtyDetailsInput, parseWritingsInput, parseWorkHistoryInput, numeric } from "@/lib/case-input";
 import type { ActionState, DuplicateHint } from "@/lib/action-state";
@@ -100,10 +101,12 @@ export async function saveCaseCore(data: FormData): Promise<ActionState> {
   // (مرحله چهارم) جزئیات ساختاریافته تخصص‌ها و آثار مؤلف از فرم می‌آیند؛
   // جزئیات هر بار جایگزین می‌شوند (مانند خود تخصص‌ها) و آثار مؤلف فقط افزودنی
   // هستند و حذفشان از صفحه جزئیات پرونده انجام می‌شود.
+  // الحاقیهٔ ۲.۲۸.۰ — اعتبارسنجی با تنظیمات پویای فیلدهای تخصص‌ها
+  const detailMeta = await loadSpecialtyDetailMeta();
   let detailRows: ReturnType<typeof parseSpecialtyDetailsInput>;
   let writingRows: ReturnType<typeof parseWritingsInput>;
   try {
-    detailRows = parseSpecialtyDetailsInput(data);
+    detailRows = parseSpecialtyDetailsInput(data, detailMeta);
     writingRows = parseWritingsInput(data);
   } catch {
     return { error: "جزئیات تخصص‌ها یا آثار مؤلف ارسالی معتبر نیست؛ مقادیر هر تخصص را بررسی کنید." };
@@ -113,7 +116,7 @@ export async function saveCaseCore(data: FormData): Promise<ActionState> {
   if (chosen.length) {
     const detailCodes = new Set(detailRows.map((row) => row.code));
     const incomplete = found.filter((row) => {
-      const spec = specialtyDetailSpec[row.code];
+      const spec = detailMeta[row.code] ?? defaultSpecialtyDetailMeta(row.code);
       return spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist") && !detailCodes.has(row.code);
     });
     if (incomplete.length) return { error: `جزئیات این تخصص‌ها کامل نشده است: ${incomplete.map((row) => row.title).join("، ")}` };

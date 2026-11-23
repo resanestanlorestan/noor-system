@@ -12,7 +12,7 @@ import { AlertTriangle, Check, LoaderCircle, Plus, Save, Trash2 } from "lucide-r
 import { saveIdentityStepAction, saveLocationStepAction, saveSpecialtiesStepAction } from "@/app/actions/case-steps";
 import { initialActionState, type ActionState } from "@/lib/action-state";
 import { isoToJalali } from "@/lib/format";
-import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, hafizJuzOptions, memorizationCertTypeOptions, recitationLevelOptions, specialtyDetailSpec, UNIVERSITY_DEGREE_LEVELS, UNIVERSITY_FIELD_SUGGESTIONS, UNIVERSITY_TYPE_OPTIONS, writingTypeLabels, type EducationType } from "@/lib/constants";
+import { activityRecordKindLabels, cooperationTypeOptions, courseFieldOptions, educationLevelOptions, educationTypeLabels, memorizationCertTypeOptions, UNIVERSITY_DEGREE_LEVELS, UNIVERSITY_FIELD_SUGGESTIONS, UNIVERSITY_TYPE_OPTIONS, writingTypeLabels, defaultSpecialtyDetailMeta, selectableSpecialtyOptions, specialtyDetailFieldLabel, type EducationType, type SpecialtyDetailMeta } from "@/lib/constants";
 import { JalaliDateInput } from "@/components/jalali-date-picker";
 import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal";
 import { SectionUpload, type DocSlot } from "@/components/doc-upload";
@@ -221,8 +221,12 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
 /* ------------------- مرحلهٔ ۳ — تخصص‌ها و سوابق ------------------- */
 
 // الحاقیهٔ ۲.۲۶.۰ — فیلدهای ثابت مرحلهٔ ۳ از meta می‌آیند (عنوان بخش‌ها، شغل، توضیحات تکمیلی)
-export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, dynForms, flagSections, meta }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; dynForms?: Array<{ specialtyId: number; title: string; version: number; config: FormConfig; saved: FormAnswers }>; flagSections?: string[]; meta?: CaseFieldMetaMap }) {
+// الحاقیهٔ ۲.۲۸.۰ — نوع/عنوان/راهنما/گزینه‌های فیلد جزئیات هر تخصص از detailMeta
+// (تنظیمات پویای پنل مدیریت تخصص‌ها) می‌آید؛ بدون تنظیم، پیش‌فرض ثابت کد.
+export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, dynForms, flagSections, meta, detailMeta }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; dynForms?: Array<{ specialtyId: number; title: string; version: number; config: FormConfig; saved: FormAnswers }>; flagSections?: string[]; meta?: CaseFieldMetaMap; detailMeta?: Record<string, SpecialtyDetailMeta> }) {
   const F = (key: string) => resolvedCaseField(meta, key);
+  // متای مؤثر فیلد جزئیات: override پنل یا پیش‌فرض ثابت کد؛ کد ناشناخته = بدون فیلد
+  const D = (code: string): SpecialtyDetailMeta => detailMeta?.[code] ?? defaultSpecialtyDetailMeta(code) ?? { kind: "none", label: null, hint: null, maxOptions: null, options: [] };
   const [state, action, pending] = useActionState<ActionState, FormData>(saveSpecialtiesStepAction, initialActionState);
   // الحاقیهٔ ۲.۲۳.۰ — پاسخ‌های فرم‌های پویا؛ پاسخ‌های ذخیره‌شدهٔ قبلی (حتی از
   // نسخهٔ قدیمی‌تر فرم) با carryOverAnswers پیش‌پر می‌شوند و بقیه خالی می‌مانند.
@@ -273,9 +277,14 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     setJuzParts((current) => ({ ...current, [id]: (current[id] || []).slice(0, count) }));
     setJuzModal({ id, count });
   };
-  const toggleDetailOption = (id: number, option: string) => setSpecialtyDetailState((current) => {
+  const toggleDetailOption = (id: number, option: string, maxOptions?: number | null) => setSpecialtyDetailState((current) => {
     const detail = detailFor(id); const options = new Set(detail.options);
-    if (options.has(option)) options.delete(option); else options.add(option);
+    if (options.has(option)) options.delete(option);
+    else {
+      // الحاقیهٔ ۲.۲۸.۰ — سقف انتخاب‌های پیکربندی‌شده از پنل مدیریت
+      if (maxOptions && options.size >= maxOptions) return current;
+      options.add(option);
+    }
     return { ...current, [id]: { ...detail, options: [...options] } };
   });
   const addWritingRow = () => setWritingRows((current) => [...current, { ...emptyWritingRow }]);
@@ -295,11 +304,11 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
   const authorSelected = Boolean(authorSpecialty && selectedSpecialties.has(authorSpecialty.id));
   const specialtyDetailsPayload = specialties
     .filter((item) => {
-      const spec = specialtyDetailSpec[item.code];
+      const spec = D(item.code);
       return selectedSpecialties.has(item.id) && spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist");
     })
     .map((item): { code: string; value?: string; options?: string[]; juz?: string } | null => {
-      const spec = specialtyDetailSpec[item.code]; const detail = detailFor(item.id);
+      const spec = D(item.code); const detail = detailFor(item.id);
       if (spec.kind === "checklist") return detail.options.length ? { code: item.code, options: detail.options } : null;
       if (!detail.value) return null;
       // الحاقیهٔ ۲.۱۳.۰ — اجزای دقیق حفظ؛ دادهٔ قدیمی بدون اجزا بدون juz ارسال می‌شود
@@ -341,19 +350,19 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       <div className={"specialty-grid" + flagClass(flagSections, "specialty-grid")} data-section="specialty-grid">{specialties.map((item) => <label key={item.id}><input type="checkbox" name="specialties" value={item.id} checked={selectedSpecialties.has(item.id)} onChange={() => toggleSpecialty(item.id)} /><span>{item.title}</span></label>)}</div>
       <div className={"specialty-details-wrap" + flagClass(flagSections, "specialty-details")} data-section="specialty-details">
       {specialties.filter((item) => {
-        const spec = specialtyDetailSpec[item.code];
+        const spec = D(item.code);
         return selectedSpecialties.has(item.id) && spec && (spec.kind === "juz" || spec.kind === "level" || spec.kind === "checklist");
       }).map((item) => {
-        const spec = specialtyDetailSpec[item.code]; const detail = detailFor(item.id);
+        const spec = D(item.code); const detail = detailFor(item.id); const fieldOptions = selectableSpecialtyOptions(item.code, spec);
         return <div className="specialty-detail" key={`detail-${item.id}`}>
-          <div className="specialty-detail-head"><strong>{item.title}</strong><small>{spec.hint}</small></div>
-          {(spec.kind === "juz" || spec.kind === "level") && <label className="specialty-detail-select"><span>{spec.kind === "juz" ? "میزان حفظ" : "سطح قرائت"}</span><select value={detail.value} onChange={(event) => (spec.kind === "juz" ? setJuzValue(item.id, event.target.value) : setDetailValue(item.id, event.target.value))}><option value="">انتخاب کنید</option>{Object.entries(spec.kind === "juz" ? hafizJuzOptions : recitationLevelOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
+          <div className="specialty-detail-head"><strong>{item.title}</strong><small>{spec.hint || ""}</small></div>
+          {(spec.kind === "juz" || spec.kind === "level") && <label className="specialty-detail-select"><span>{specialtyDetailFieldLabel(item.code, spec)}</span><select value={detail.value} onChange={(event) => (spec.kind === "juz" ? setJuzValue(item.id, event.target.value) : setDetailValue(item.id, event.target.value))}><option value="">انتخاب کنید</option>{Object.entries(fieldOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>}
           {/* الحاقیهٔ ۲.۱۳.۰ — خلاصهٔ اجزای منتخب + ویرایش */}
           {spec.kind === "juz" && detail.value && <div className="juz-parts-line">
             <span className="juz-parts-value">{juzParts[item.id]?.length ? `اجزای منتخب: ${juzPartsSummaryFa(juzParts[item.id])}` : "جزءها هنوز انتخاب نشده‌اند"}</span>
             <button type="button" onClick={() => setJuzModal({ id: item.id, count: detail.value === "complete" ? 30 : Number(detail.value) })}>{juzParts[item.id]?.length ? "ویرایش اجزا" : "انتخاب اجزا"}</button>
           </div>}
-          {spec.kind === "checklist" && spec.options && <div className="check-list">{Object.entries(spec.options).map(([key, label]) => <label key={key} className={detail.options.includes(key) ? "checked" : ""}><input type="checkbox" checked={detail.options.includes(key)} onChange={() => toggleDetailOption(item.id, key)} /><span>{label}</span></label>)}</div>}
+          {spec.kind === "checklist" && <div className="check-list">{Object.entries(fieldOptions).map(([key, label]) => <label key={key} className={detail.options.includes(key) ? "checked" : ""}><input type="checkbox" checked={detail.options.includes(key)} onChange={() => toggleDetailOption(item.id, key, spec.maxOptions)} /><span>{label}</span></label>)}</div>}
           {/* الحاقیهٔ ۲.۱۴.۰ — نوع مدرک حافظ + گواهی حفظ (انتقال از فرم قبلی ثبت‌نام) */}
           {item.code === "memorizer" && <div className="memorizer-block">
             <label>نوع مدرک حافظ<select value={memorizationCertType} onChange={(event) => setMemorizationCertType(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{Object.entries(memorizationCertTypeOptions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>

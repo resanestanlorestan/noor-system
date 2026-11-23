@@ -23,7 +23,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { activistSpecialties, activistSpecialtyDetails, caseStepDefinitions, documents, formAnswers, formDefinitions, specialties } from "@/db/schema";
 import { isFieldVisible, type FormAnswers, type FormConfig } from "@/lib/form-config";
-import { specialtyDetailSpec } from "@/lib/constants";
+import { defaultSpecialtyDetailMeta, loadSpecialtyDetailMeta } from "@/lib/specialty-detail-meta";
 import { loadCaseFieldMeta } from "@/lib/case-field-meta";
 import { resolvedCaseField, type CaseFieldMetaMap } from "@/lib/case-field-catalog";
 import type { AppStatus } from "@/lib/constants";
@@ -104,7 +104,7 @@ export type MissingCheck = { key: string; label: string };
 /** Loads the facts for one case. Callers already hold the application and
  *  activist rows (getCaseForUser), so only the small aggregate queries run. */
 export async function loadCaseStepFacts(person: ActivistRow, status: AppStatus, applicationId: string): Promise<CaseStepFacts> {
-  const [specRows, detailRows, evidenceRows, fieldMeta] = await Promise.all([
+  const [specRows, detailRows, evidenceRows, fieldMeta, detailMeta] = await Promise.all([
     db.select({ specialtyId: activistSpecialties.specialtyId, code: specialties.code, title: specialties.title })
       .from(activistSpecialties)
       .innerJoin(specialties, eq(activistSpecialties.specialtyId, specialties.id))
@@ -115,11 +115,13 @@ export async function loadCaseStepFacts(person: ActivistRow, status: AppStatus, 
     db.select({ id: documents.id }).from(documents).where(and(eq(documents.applicationId, applicationId), eq(documents.kind, "evidence"))),
     // الحاقیهٔ ۲.۲۶.۰ — overrideهای فیلدهای ثابت (خطا → پیش‌فرض کاتالوگ)
     loadCaseFieldMeta(),
+    // الحاقیهٔ ۲.۲۸.۰ — متای پویای فیلدهای جزئیات تخصص‌ها (خطا → پیش‌فرض ثابت کد)
+    loadSpecialtyDetailMeta(),
   ]);
   const detailBySpecialty = new Map(detailRows.map((row) => [row.specialtyId, row]));
   const specialtyDetailMissing: string[] = [];
   for (const spec of specRows) {
-    const specDef = specialtyDetailSpec[spec.code];
+    const specDef = detailMeta[spec.code] ?? defaultSpecialtyDetailMeta(spec.code);
     if (!specDef || (specDef.kind !== "juz" && specDef.kind !== "level" && specDef.kind !== "checklist")) continue;
     const detail = detailBySpecialty.get(spec.specialtyId);
     const ok = specDef.kind === "checklist" ? (detail?.detailOptions?.length ?? 0) > 0 : Boolean(detail?.detailValue);
