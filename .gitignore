@@ -48,3 +48,7 @@ scripts/deploy-2187/.rc-token
 
 # توکن دیپلوی ۲.۱۹.۰
 scripts/deploy-2190/.rc-token
+
+# دادهٔ محلی پستگرس سندباکس و ورودی‌های کاربر — هرگز در مخزن نمی‌آیند
+.pgdata-test/
+upload/

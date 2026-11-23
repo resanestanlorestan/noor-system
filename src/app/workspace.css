@@ -1322,6 +1322,9 @@
 .builder-options { border:1px dashed var(--line-soft, #e3e9f2); border-radius:9px; padding:9px; display:grid; gap:7px; }
 .builder-options strong, .builder-condition strong { font-size:11.5px; }
 .builder-option { display:grid; grid-template-columns:1fr 1fr auto; gap:6px; align-items:center; }
+/* الحاقیهٔ ۲.۲۸.۱ — کادرهای برچسب/راهنمای گزینه در فرم‌ساز پویا هم مرئی شدند */
+.builder-option input { min-height:34px; min-width:0; width:100%; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); color:var(--ink); font-size:11.5px; padding:7px 10px; outline:none; }
+.builder-option input:focus { border-color:var(--line-strong); box-shadow:0 0 0 3px var(--ring); background:var(--surface); }
 @media (max-width: 640px) { .builder-option { grid-template-columns:1fr; } }
 .builder-file-rule { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
 @media (max-width: 640px) { .builder-file-rule { grid-template-columns:1fr; } }
@@ -1395,7 +1398,12 @@
 .spec-option-tools button { border:1px solid #dfe7e1; background:#fff; border-radius:7px; padding:4px 6px; display:inline-flex; cursor:pointer; }
 .spec-option-tools button:disabled { opacity:.35; cursor:default; }
 .spec-option-label { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; font-size:11.5px; color:#5b6b60; }
-.spec-option-label input { max-width:340px; }
+/* الحاقیهٔ ۲.۲۸.۱ — کادر برچسب گزینه مرئی است (قبلاً بدون استایل مثل متن ثابت دیده می‌شد) */
+.spec-option-label input { width:100%; max-width:340px; min-height:34px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); color:var(--ink); font-size:11.5px; padding:7px 10px; outline:none; }
+.spec-option-label input:focus { border-color:var(--line-strong); box-shadow:0 0 0 3px var(--ring); background:var(--surface); }
+.spec-option-save { border:1px solid #dfe7e1; background:#fff; border-radius:8px; padding:6px 10px; font-size:11px; color:#33413a; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; flex-shrink:0; }
+.spec-option-save:hover { border-color:var(--line-strong); background:var(--surface-2); }
+.spec-option-save:disabled { opacity:.55; cursor:default; }
 .spec-option-key { font-size:10.5px; color:#8a948c; background:#f1f5f2; border-radius:6px; padding:3px 8px; white-space:nowrap; }
 .spec-fields-note { display:block; margin-top:6px; color:#7a867d; font-size:11.5px; }
 .spec-fields-actions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }

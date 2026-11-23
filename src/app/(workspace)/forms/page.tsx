@@ -31,8 +31,8 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
     <div className="forms-grid">
       <SpecialtiesManager rows={rows} selectedId={selected?.id ?? null} />
       {selected ? <>
-        {/* الحاقیهٔ ۲.۲۸.۰ — ویرایشگر پویای فیلد جزئیات تخصص انتخاب‌شده */}
-        <SpecialtyFieldsEditor code={selected.code} title={selected.title} meta={data.detailMeta[selected.code] ?? { kind: "none", label: null, hint: null, maxOptions: null, options: [] }} savedAt={data.detailSavedAt[selected.code] || ""} />
+        {/* الحاقیهٔ ۲.۲۸.۰ — ویرایشگر پویای فیلد جزئیات تخصص انتخاب‌شده؛ الحاقیهٔ ۲.۲۸.۱ — کلید پنل دیگر به زمان ذخیره وابسته نیست */}
+        <SpecialtyFieldsEditor code={selected.code} title={selected.title} meta={data.detailMeta[selected.code] ?? { kind: "none", label: null, hint: null, maxOptions: null, options: [] }} />
         <FormBuilder specialtyId={selected.id} specialtyTitle={selected.title} status={selectedDef ? selectedDef.status : "none"} version={selectedDef?.version || 0} answersCount={data.usageMap.get(selected.id) || 0} initialConfig={initialConfig} />
       </>
         : <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>فرم‌ساز پویا</span><h2>انتخاب تخصص</h2><p>برای طراحی یا ویرایش فرم یک تخصص، از فهرست «فرم‌ساز» همان تخصص را انتخاب کنید. ساختار فرم به‌صورت نسخه‌بندی‌شده ذخیره می‌شود و پاسخ‌های ثبت‌شده با ویرایش‌های بعدی از بین نمی‌روند.</p></div><Layers size={19} /></div>

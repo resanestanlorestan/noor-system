@@ -3,7 +3,7 @@
 const EmbeddedPostgres = require('embedded-postgres').default;
 const { Client } = require('pg');
 const pg = new EmbeddedPostgres({
-  databaseDir: '/home/z/.pgdata-test',
+  databaseDir: '/home/z/my-project/.pgdata-test',
   user: 'postgres',
   password: 'postgres',
   port: 5432,

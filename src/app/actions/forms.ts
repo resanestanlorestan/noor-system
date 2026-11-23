@@ -42,11 +42,10 @@ export async function listSpecialtiesForForms() {
   const usage = await db.select({ specialtyId: formAnswers.specialtyId, n: count() }).from(formAnswers).groupBy(formAnswers.specialtyId);
   const usageMap = new Map(usage.filter((row) => row.specialtyId !== null).map((row) => [row.specialtyId as number, row.n]));
   const defMap = new Map(defs.map((row) => [row.entityId, row]));
-  // الحاقیهٔ ۲.۲۸.۰ — متای مؤثر فیلد جزئیات + زمان آخرین ذخیرهٔ هر override
+  // الحاقیهٔ ۲.۲۸.۰ — متای مؤثر فیلد جزئیات؛ الحاقیهٔ ۲.۲۸.۱ — timestamp ذخیره
+  // از خروجی حذف شد (کلید پنل دیگر به آن وابسته نیست و کوئری اضافه هم برداشته شد)
   const detailMeta = await loadSpecialtyDetailMeta();
-  const overrideRows = await db.select({ code: specialtyDetailOverrides.code, updatedAt: specialtyDetailOverrides.updatedAt }).from(specialtyDetailOverrides);
-  const detailSavedAt = Object.fromEntries(overrideRows.map((row) => [row.code, row.updatedAt.toISOString()]));
-  return { rows, defMap, usageMap, detailMeta, detailSavedAt };
+  return { rows, defMap, usageMap, detailMeta };
 }
 
 /** افزودن تخصص از داشبورد (نام + توضیح) با کد یکتا */
