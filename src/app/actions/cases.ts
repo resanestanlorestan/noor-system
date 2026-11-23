@@ -12,6 +12,7 @@ import { activistSpecialties, activistSpecialtyDetails, activistOrganizations, a
 import { formFileMimeHints, type FormConfig } from "@/lib/form-config";
 import { requireUser } from "@/lib/auth";
 import { completeness, getCaseForUser, isManager, missingRequired } from "@/lib/data";
+import { loadCaseFieldMeta } from "@/lib/case-field-meta";
 import { can } from "@/lib/permissions";
 import { isUuid, managerInScope } from "@/lib/workflow-utils";
 import { deliverOutbox, notifyUsers, queueSms } from "@/lib/messaging";
@@ -46,11 +47,13 @@ async function advanceCase(data: FormData, target: "ready" | "pending", dest?: s
   const result = await db.transaction(async (tx) => {
     const [locked] = await tx.select({ application: applications, activist: activists }).from(applications).innerJoin(activists, eq(applications.activistId, activists.id)).where(eq(applications.id, id)).for("update");
     if (!locked || locked.application.status !== row.application.status) return "وضعیت پرونده تغییر کرده است؛ دوباره تلاش کنید.";
-    const [specs, docs] = await Promise.all([
+    const [specs, docs, fieldMeta] = await Promise.all([
       tx.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, locked.activist.id)),
       tx.select({ id: documents.id }).from(documents).where(and(eq(documents.applicationId, id), eq(documents.kind, "evidence"))),
+      // الحاقیهٔ ۲.۲۶.۰ — گیت ارسال از override فیلدهای ثابت پیروی می‌کند
+      loadCaseFieldMeta(),
     ]);
-    const missing = missingRequired(locked.activist, specs.length, docs.length, Boolean(locked.activist.photoDocumentId));
+    const missing = missingRequired(locked.activist, specs.length, docs.length, Boolean(locked.activist.photoDocumentId), fieldMeta);
     if (missing.length) return `برای ارسال تکمیل کنید: ${missing.join("، ")}`;
     // الحاقیهٔ ۲.۱۰.۰: زنجیرهٔ مراحل — حتی اگر داده‌ها کامل باشند، ترتیب مراحل
     // از روی همان موتور محاسبه می‌شود (مثلاً جزئیات ناقص تخصص‌ها را می‌گیرد).

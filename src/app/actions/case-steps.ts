@@ -21,6 +21,8 @@ import { privateDir } from "@/lib/local-secrets";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { CASE_STEPS, computeCaseSteps, loadActiveCaseSteps, loadCaseStepFacts, stepGateError, type CaseStepKey } from "@/lib/case-steps";
+import { loadCaseFieldMeta } from "@/lib/case-field-meta";
+import { resolvedCaseField } from "@/lib/case-field-catalog";
 import type { ActionState, DuplicateHint } from "@/lib/action-state";
 import { stashFlash } from "@/lib/flash";
 import { validateFormAnswers, type FormAnswers, type FormConfig } from "@/lib/form-config";
@@ -103,36 +105,59 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
       if (own) return { error: "برای حساب شما پرونده‌ای وجود دارد؛ آن را از فهرست پرونده‌ها باز کنید.", ...(own ? { existingCaseId: own.id } : {}) };
     }
   }
+  // الحاقیهٔ ۲.۲۶.۰ — اعتبارسنجی از override فیلدهای ثابت پیروی می‌کند:
+  // فیلد مخفی نادیده گرفته و از به‌روزرسانی حذف می‌شود (دادهٔ قبلی حفظ می‌ماند)
+  // و فیلد اختیاری‌شده در فهرست نقص نمی‌آید. فرمتِ مقدارِ ارائه‌شده همیشه کنترل می‌شود.
+  const fieldMeta = await loadCaseFieldMeta();
+  const R = (key: string) => resolvedCaseField(fieldMeta, key);
+  const firstField = R("identity.firstName"), lastField = R("identity.lastName");
+  const fatherField = R("identity.fatherName"), natField = R("identity.nationalId"), idCardField = R("identity.idCardNumber");
+  const idIssueField = R("identity.idIssuePlace"), birthField = R("identity.birthDate"), genderField = R("identity.gender");
+  const phoneField = R("identity.phone"), altField = R("identity.alternatePhone"), emailField = R("identity.contactEmail");
   const firstName = field(data, "firstName", 80), lastName = field(data, "lastName", 100);
-  const nationalId = normalizeDigits(field(data, "nationalId", 20)).replace(/\s/g, "");
+  const nationalId = natField.hidden ? "" : normalizeDigits(field(data, "nationalId", 20)).replace(/\s/g, "");
   if (nationalId && !validNationalId(nationalId)) return { error: "کد ملی معتبر نیست؛ ده رقم و رقم کنترل را بررسی کنید." };
-  const birth = field(data, "birthDate", 20); const birthDate = birth ? jalaliToIso(birth) : null;
+  const birth = birthField.hidden ? "" : field(data, "birthDate", 20); const birthDate = birth ? jalaliToIso(birth) : null;
   if (birth && !birthDate) return { error: "تاریخ تولد شمسی معتبر نیست؛ مانند ۱۳۷۵/۰۱/۰۱ وارد کنید." };
-  const gender = field(data, "gender", 20);
+  const gender = genderField.hidden ? "" : field(data, "gender", 20);
   if (gender && !["female", "male"].includes(gender)) return { error: "جنسیت انتخاب‌شده معتبر نیست." };
-  const phone = normalizeDigits(field(data, "phone", 20)).replace(/\s/g, "");
-  const alternatePhone = normalizeDigits(field(data, "alternatePhone", 20)).replace(/\s/g, "");
+  const phone = phoneField.hidden ? "" : normalizeDigits(field(data, "phone", 20)).replace(/\s/g, "");
+  const alternatePhone = altField.hidden ? "" : normalizeDigits(field(data, "alternatePhone", 20)).replace(/\s/g, "");
   if ((phone && !/^09\d{9}$/.test(phone)) || (alternatePhone && !/^09\d{9}$/.test(alternatePhone))) return { error: "شماره همراه باید ۱۱ رقم و با ۰۹ شروع شود." };
-  const email = field(data, "contactEmail", 254).toLowerCase();
+  const email = emailField.hidden ? "" : field(data, "contactEmail", 254).toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "ایمیل تماس معتبر نیست." };
-  const idCard = normalizeDigits(field(data, "idCardNumber", 20)).replace(/\s/g, "");
+  const idCard = idCardField.hidden ? "" : normalizeDigits(field(data, "idCardNumber", 20)).replace(/\s/g, "");
   if (idCard && !validIdCardNumber(idCard)) return { error: "شماره شناسنامه باید فقط شامل رقم و حداکثر ۱۰ رقم باشد." };
-  const idIssue = field(data, "idIssuePlace", 80);
-  const fatherName = field(data, "fatherName", 80);
+  const idIssue = idIssueField.hidden ? "" : field(data, "idIssuePlace", 80);
+  const fatherName = fatherField.hidden ? "" : field(data, "fatherName", 80);
   const identityMissing: string[] = [];
-  if (firstName.length < 2) identityMissing.push("نام");
-  if (lastName.length < 2) identityMissing.push("نام خانوادگی");
-  if (!fatherName) identityMissing.push("نام پدر");
-  if (!existing && !nationalId) identityMissing.push("کد ملی");
+  if (firstField.required && firstName.length < 2) identityMissing.push(firstField.label);
+  if (lastField.required && lastName.length < 2) identityMissing.push(lastField.label);
+  if (fatherField.required && !fatherName) identityMissing.push(fatherField.label);
+  if (!existing && natField.required && !nationalId) identityMissing.push(natField.label);
   if (existing && nationalId) { /* کد ملی اختیاری در ویرایش؛ فقط اگر وارد شود اعتبارسنجی و جایگزین می‌شود */ }
-  if (!idCard) identityMissing.push("شماره شناسنامه");
-  if (!idIssue) identityMissing.push("محل صدور شناسنامه");
-  if (!birth) identityMissing.push("تاریخ تولد شمسی");
-  if (!gender) identityMissing.push("جنسیت");
-  if (!phone) identityMissing.push("شماره همراه");
-  if (!alternatePhone) identityMissing.push("شماره همراه جایگزین");
+  if (idCardField.required && !idCard) identityMissing.push(idCardField.label);
+  if (idIssueField.required && !idIssue) identityMissing.push(idIssueField.label);
+  if (birthField.required && !birth) identityMissing.push(birthField.label);
+  if (genderField.required && !gender) identityMissing.push(genderField.label);
+  if (phoneField.required && !phone) identityMissing.push(phoneField.label);
+  if (altField.required && !alternatePhone) identityMissing.push(altField.label);
+  if (emailField.required && !email) identityMissing.push(emailField.label);
   if (identityMissing.length) return { error: `فیلدهای اجباری مرحلهٔ هویتی را تکمیل کنید: ${identityMissing.join("، ")}` };
   const protectedId = nationalId ? await protectNationalId(nationalId) : null;
+  // به‌روزرسانی فقط برای فیلدهای نمایان — فیلد مخفی‌شده هیچ‌گاه مقدار قبلی را پاک نمی‌کند
+  const identityPatch: Partial<typeof activists.$inferInsert> = {};
+  if (!firstField.hidden) identityPatch.firstName = firstName;
+  if (!lastField.hidden) identityPatch.lastName = lastName;
+  if (!fatherField.hidden) identityPatch.fatherName = fatherName || null;
+  if (protectedId) { identityPatch.nationalIdCipher = protectedId.cipher; identityPatch.nationalIdHash = protectedId.hash; identityPatch.nationalIdLast4 = protectedId.last4; }
+  if (!birthField.hidden) identityPatch.birthDate = birthDate;
+  if (!genderField.hidden) identityPatch.gender = gender;
+  if (!phoneField.hidden) identityPatch.phone = phone;
+  if (!altField.hidden) identityPatch.alternatePhone = alternatePhone;
+  if (!emailField.hidden) identityPatch.email = email || null;
+  if (!idCardField.hidden) identityPatch.idCardNumber = idCard || null;
+  if (!idIssueField.hidden) identityPatch.idIssuePlace = idIssue || null;
 
   // الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی/حوزوی گام هویتی (مقطع کشویی + مدرک همان بخش)
   let educationRows: ReturnType<typeof parseEducationInput>;
@@ -164,12 +189,7 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
 
   if (existing) {
     try {
-      await patchActivist(user, existing, {
-        firstName, lastName, fatherName: fatherName || null,
-        ...(protectedId ? { nationalIdCipher: protectedId.cipher, nationalIdHash: protectedId.hash, nationalIdLast4: protectedId.last4 } : {}),
-        birthDate, gender, phone, alternatePhone, email: email || null,
-        idCardNumber: idCard || null, idIssuePlace: idIssue || null,
-      }, identityTitle, existing.application.status === "draft" ? "completing" : null);
+      await patchActivist(user, existing, identityPatch, identityTitle, existing.application.status === "draft" ? "completing" : null);
     } catch {
       return { error: "ذخیرهٔ مرحلهٔ هویتی انجام نشد؛ وضعیت پرونده را دوباره بررسی کنید." };
     }
@@ -257,10 +277,10 @@ export async function saveIdentityStepAction(_state: ActionState, data: FormData
   try {
     resultId = await db.transaction(async (tx) => {
       const [person] = await tx.insert(activists).values({
-        firstName, lastName, fatherName: fatherName || null,
-        ...(protectedId ? { nationalIdCipher: protectedId.cipher, nationalIdHash: protectedId.hash, nationalIdLast4: protectedId.last4 } : {}),
-        birthDate, gender, phone, alternatePhone, email: email || null,
-        idCardNumber: idCard || null, idIssuePlace: idIssue || null,
+        ...identityPatch,
+        // نام و نام خانوادگی ستون notNull دارند (غیرقابل مخفی‌سازی) — فقط برای راضی‌کردن تایپ
+        firstName: identityPatch.firstName ?? firstName,
+        lastName: identityPatch.lastName ?? lastName,
         userId: user.effectiveRole === "activist" ? user.id : null,
       }).returning();
       const [application] = await tx.insert(applications).values({ activistId: person.id, createdBy: user.id, source, status: "initial" }).returning();
@@ -324,14 +344,20 @@ export async function saveLocationStepAction(_state: ActionState, data: FormData
   const { user, row } = context;
   const changeReason = field(data, "changeReason", 2000);
   if (user.effectiveRole !== "activist" && changeReason.length < 5) return { error: "برای ویرایش سازمانی، دلیل اصلاح را با حداقل ۵ نویسه وارد کنید." };
+  // الحاقیهٔ ۲.۲۶.۰ — الزام استان/شهرستان از override (location.residence) و
+  // فیلدهای مخفی از به‌روزرسانی حذف می‌شوند تا دادهٔ قبلی پاک نشود
+  const locationMeta = await loadCaseFieldMeta();
+  const residenceReq = resolvedCaseField(locationMeta, "location.residence");
   let provinceId = numeric(field(data, "provinceId", 10)), countyId = numeric(field(data, "countyId", 10));
-  if (!provinceId || !countyId) return { error: "انتخاب استان و شهرستان سکونت برای تکمیل این مرحله الزامی است." };
-  if (user.effectiveRole !== "super_admin" && user.effectiveRole !== "activist") {
+  if (residenceReq.required && (!provinceId || !countyId)) return { error: `انتخاب ${residenceReq.label} برای تکمیل این مرحله الزامی است.` };
+  if (provinceId && user.effectiveRole !== "super_admin" && user.effectiveRole !== "activist") {
     if (!user.provinceId) return { error: "محدوده جغرافیایی حساب شما مشخص نیست." };
     if (provinceId !== user.provinceId || (user.countyId && countyId !== user.countyId)) return { error: "ثبت خارج از محدوده مجاز امکان‌پذیر نیست." };
   }
-  const [county] = await db.select().from(counties).where(eq(counties.id, countyId)).limit(1);
-  if (!county || county.provinceId !== provinceId) return { error: "شهرستان با استان انتخاب‌شده سازگار نیست." };
+  if (countyId) {
+    const [county] = await db.select().from(counties).where(eq(counties.id, countyId)).limit(1);
+    if (!county || county.provinceId !== provinceId) return { error: "شهرستان با استان انتخاب‌شده سازگار نیست." };
+  }
   const postalCode = normalizeDigits(field(data, "postalCode", 10)).replace(/\s/g, "");
   if (postalCode && !validPostalCode(postalCode)) return { error: "کد پستی باید ۱۰ رقم باشد." };
   const activityProvinceId = numeric(field(data, "activityProvinceId", 10)), activityCountyId = numeric(field(data, "activityCountyId", 10));
@@ -339,16 +365,14 @@ export async function saveLocationStepAction(_state: ActionState, data: FormData
     const [activityCounty] = await db.select().from(counties).where(eq(counties.id, activityCountyId)).limit(1);
     if (!activityCounty || activityCounty.provinceId !== activityProvinceId) return { error: "شهرستان فعالیت با استان فعالیت سازگار نیست." };
   }
+  const locationPatch: Partial<typeof activists.$inferInsert> = { provinceId, countyId, activityProvinceId, activityCountyId };
+  if (!resolvedCaseField(locationMeta, "location.city").hidden) locationPatch.city = field(data, "city", 120) || null;
+  if (!resolvedCaseField(locationMeta, "location.postalCode").hidden) locationPatch.postalCode = postalCode || null;
+  if (!resolvedCaseField(locationMeta, "location.address").hidden) locationPatch.address = field(data, "address", 1000) || null;
+  if (!resolvedCaseField(locationMeta, "location.activityPlace").hidden) locationPatch.activityPlace = field(data, "activityPlace", 180) || null;
+  if (!resolvedCaseField(locationMeta, "location.organization").hidden) locationPatch.organization = field(data, "organization", 180) || null;
   try {
-    await patchActivist(user, row, {
-      provinceId, countyId,
-      city: field(data, "city", 120) || null,
-      postalCode: postalCode || null,
-      address: field(data, "address", 1000) || null,
-      activityProvinceId, activityCountyId,
-      activityPlace: field(data, "activityPlace", 180) || null,
-      organization: field(data, "organization", 180) || null,
-    }, context.stepTitle, null);
+    await patchActivist(user, row, locationPatch, context.stepTitle, null);
   } catch {
     return { error: "ذخیرهٔ مرحلهٔ سکونت و فعالیت انجام نشد؛ دوباره تلاش کنید." };
   }
@@ -365,8 +389,12 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
   const { user, row } = context;
   const changeReason = field(data, "changeReason", 2000);
   if (user.effectiveRole !== "activist" && changeReason.length < 5) return { error: "برای ویرایش سازمانی، دلیل اصلاح را با حداقل ۵ نویسه وارد کنید." };
+  // الحاقیهٔ ۲.۲۶.۰ — الزام «حداقل یک تخصص» از override مدیر و فیلدهای مخفی
+  // شغل/توضیحات از به‌روزرسانی حذف می‌شوند تا دادهٔ قبلی پاک نشود
+  const specialtiesMeta = await loadCaseFieldMeta();
+  const minOneReq = resolvedCaseField(specialtiesMeta, "specialties.minOne");
   const chosen = [...new Set(data.getAll("specialties").map((v) => numeric(String(v))).filter((v): v is number => v !== null))];
-  if (!chosen.length) return { error: "برای تکمیل این مرحله، انتخاب حداقل یک تخصص قرآنی الزامی است." };
+  if (minOneReq.required && !chosen.length) return { error: `برای تکمیل این مرحله، ${minOneReq.label} الزامی است.` };
   if (chosen.length > 20) return { error: "تعداد تخصص‌ها معتبر نیست." };
   const found = await db.select({ id: specialties.id, code: specialties.code, title: specialties.title, active: specialties.active }).from(specialties).where(inArray(specialties.id, chosen));
   if (found.length !== chosen.length) return { error: "یکی از تخصص‌ها معتبر نیست." };
@@ -472,7 +500,11 @@ export async function saveSpecialtiesStepAction(_state: ActionState, data: FormD
         tx.select({ value: sql<number>`coalesce(max(${applicationVersions.version}), 0) + 1` }).from(applicationVersions).where(eq(applicationVersions.applicationId, row.application.id)),
       ]);
       await tx.insert(applicationVersions).values({ applicationId: row.application.id, version: Number(next[0].value), snapshot: { profile: previous, specialties: oldSpecialties, specialtyDetails: oldDetails, writings: oldWritings, status: locked.status }, reason: `ذخیرهٔ مرحلهٔ «${context.stepTitle}» ویزارد ثبت`, createdBy: user.id });
-      await tx.update(activists).set({ job: field(data, "job", 120) || null, notes: field(data, "notes", 4000) || null, updatedAt: new Date() }).where(eq(activists.id, row.activist.id));
+      await tx.update(activists).set({
+        ...(!resolvedCaseField(specialtiesMeta, "specialties.job").hidden ? { job: field(data, "job", 120) || null } : {}),
+        ...(!resolvedCaseField(specialtiesMeta, "specialties.notes").hidden ? { notes: field(data, "notes", 4000) || null } : {}),
+        updatedAt: new Date(),
+      }).where(eq(activists.id, row.activist.id));
       await tx.delete(activistSpecialties).where(eq(activistSpecialties.activistId, row.activist.id));
       await tx.insert(activistSpecialties).values(chosen.map((specialtyId) => ({ activistId: row.activist.id, specialtyId })));
       await tx.delete(activistSpecialtyDetails).where(eq(activistSpecialtyDetails.activistId, row.activist.id));

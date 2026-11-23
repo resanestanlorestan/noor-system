@@ -30,7 +30,7 @@ type Person = CaseStepFacts["person"];
 const person = (overrides: Partial<Person> = {}): Person => ({
   firstName: "", lastName: "", fatherName: null, nationalIdHash: null, idCardNumber: null,
   idIssuePlace: null, birthDate: null, gender: null, phone: null, alternatePhone: null,
-  provinceId: null, countyId: null, photoDocumentId: null, ...overrides,
+  email: null, provinceId: null, countyId: null, photoDocumentId: null, ...overrides,
 });
 
 const facts = (overrides: Partial<Omit<CaseStepFacts, "person">> & { person?: Partial<Person> } = {}): CaseStepFacts => {

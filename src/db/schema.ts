@@ -173,6 +173,20 @@ export const caseStepDefinitions = pgTable("case_step_definitions", {
   updatedBy: uuid("updated_by").references(() => users.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("case_step_defs_order_idx").on(table.sortOrder, table.id)]);
+// الحاقیهٔ ۲.۲۶.۰ — override فیلدهای ثابت مراحل پایه: ویرایش عنوان/راهنما،
+// برداشتن یا افزودن الزام و مخفی‌سازی؛ کلید پایدار (step_code, field_key) با
+// کاتالوگ src/lib/case-field-catalog.ts یکی است. ردیف غایب = پیش‌فرض کاتالوگ.
+export const caseFieldOverrides = pgTable("case_field_overrides", {
+  id: serial("id").primaryKey(),
+  stepCode: varchar("step_code", { length: 40 }).notNull(),
+  fieldKey: varchar("field_key", { length: 100 }).notNull(),
+  label: varchar("label", { length: 200 }),
+  help: varchar("help", { length: 500 }),
+  requiredOverride: boolean("required_override"),
+  hidden: boolean("hidden").notNull().default(false),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("case_field_overrides_unique").on(table.stepCode, table.fieldKey), index("case_field_overrides_step_idx").on(table.stepCode)]);
 export const activists = pgTable("quranic_activists", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").unique().references(() => users.id),

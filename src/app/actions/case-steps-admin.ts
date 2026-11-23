@@ -9,11 +9,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { stashFlash } from "@/lib/flash";
 import { db } from "@/db";
-import { caseStepDefinitions, formAnswers, formDefinitions } from "@/db/schema";
+import { caseFieldOverrides, caseStepDefinitions, formAnswers, formDefinitions } from "@/db/schema";
 import { audit, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { field } from "@/lib/case-input";
 import { faNumber } from "@/lib/format";
+import { caseFieldCatalogFor, resolvedCaseField, type CaseFieldScope, type ResolvedCaseField } from "@/lib/case-field-catalog";
+import { loadCaseFieldMeta } from "@/lib/case-field-meta";
 import type { ActionState } from "@/lib/action-state";
 
 const MANAGE_ERROR = "مجوز مدیریت مراحل ثبت پرونده را ندارید.";
@@ -172,5 +174,71 @@ export async function reorderCaseStepsAction(data: FormData): Promise<ActionStat
     return { success: "ترتیب مراحل ذخیره شد و در فرایند ثبت پرونده اعمال می‌شود." };
   } catch {
     return { error: "ذخیرهٔ ترتیب انجام نشد." };
+  }
+}
+
+/* --------------- الحاقیهٔ ۲.۲۶.۰ — ویرایش فیلدهای ثابت مراحل --------------- */
+
+/** نمای حل‌شدهٔ یک فیلد ثابت برای پنل مدیریت: پیش‌فرض کاتالوگ + override فعلی */
+export type FixedFieldView = ResolvedCaseField & { scope: CaseFieldScope; role: "section" | "field" | "requirement"; canToggleRequired: boolean; canHide: boolean };
+
+/** فهرست فیلدهای ثابت یک مرحلهٔ پایه با وضعیت حل‌شده (پیش‌فرض + override) */
+export async function listFixedFieldsForStep(stepCode: string): Promise<FixedFieldView[] | null> {
+  const user = await requireUser();
+  if (!(await can(user, "forms.manage"))) return null;
+  const meta = await loadCaseFieldMeta();
+  return caseFieldCatalogFor(stepCode as CaseFieldScope).map((entry) => ({
+    ...resolvedCaseField(meta, entry.key),
+    scope: entry.scope,
+    role: entry.role,
+    canToggleRequired: entry.canToggleRequired,
+    canHide: entry.canHide,
+  }));
+}
+
+/** ذخیرهٔ ویرایش یک فیلد ثابت (عنوان/راهنما/الزام/مخفی) — upsert روی کلید پایدار؛
+ *  فیلد ناموجود در کاتالوگ و پرچم‌های غیرمجاز هر فیلد رد می‌شود و تغییر فقط
+ *  لایهٔ نمایش/اعتبارسنجی ثبت‌های تازه را عوض می‌کند (دادهٔ تاریخی دست‌نخورده). */
+export async function saveFieldOverrideAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  const guard = await manageGuard();
+  if ("error" in guard) return { error: guard.error };
+  const stepCode = field(data, "stepCode", 40);
+  const fieldKey = field(data, "fieldKey", 100);
+  const entry = caseFieldCatalogFor(stepCode as CaseFieldScope).find((item) => item.key === `${stepCode}.${fieldKey}`);
+  if (!entry) return { error: "فیلد ثابت یافت نشد؛ فهرست را تازه‌سازی کنید." };
+  const label = field(data, "label", 200);
+  if (label.trim().length < 2) return { error: "عنوان فیلد را کامل وارد کنید (حداقل ۲ نویسه)." };
+  const help = field(data, "help", 500);
+  const requiredInput = field(data, "required", 6);
+  const hiddenInput = field(data, "hidden", 6);
+  const requiredOverride = entry.canToggleRequired ? requiredInput === "yes" : entry.required;
+  const hidden = entry.canHide ? hiddenInput === "yes" : false;
+  try {
+    await db.insert(caseFieldOverrides).values({ stepCode, fieldKey, label: label.trim(), help: help.trim() || null, requiredOverride, hidden, updatedBy: guard.user.id, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: [caseFieldOverrides.stepCode, caseFieldOverrides.fieldKey], set: { label: label.trim(), help: help.trim() || null, requiredOverride, hidden, updatedBy: guard.user.id, updatedAt: new Date() } });
+    await audit(guard.user.id, "edit_case_field", "case_field", `${stepCode}.${fieldKey}`, `${entry.label} → ${label.trim()}${hidden ? " (مخفی)" : ""}${requiredOverride !== entry.required ? (requiredOverride ? " (الزامی شد)" : " (اختیاری شد)") : ""}`);
+    revalidatePath("/steps");
+    return { success: `فیلد «${label.trim()}» ذخیره شد و در فرم ثبت پرونده اعمال می‌شود.` };
+  } catch {
+    return { error: "ذخیرهٔ تغییرات فیلد انجام نشد؛ دوباره تلاش کنید." };
+  }
+}
+
+/** بازنشانی یک فیلد ثابت به پیش‌فرض کاتالوگ (حذف ردیف override) */
+export async function resetFieldOverrideAction(data: FormData) {
+  const fail = (message: string) => redirect("/steps?m=" + stashFlash(message));
+  const guard = await manageGuard();
+  if ("error" in guard) return fail(guard.error);
+  const stepCode = field(data, "stepCode", 40);
+  const fieldKey = field(data, "fieldKey", 100);
+  const entry = caseFieldCatalogFor(stepCode as CaseFieldScope).find((item) => item.key === `${stepCode}.${fieldKey}`);
+  if (!entry) return fail("فیلد ثابت یافت نشد؛ فهرست را تازه‌سازی کنید.");
+  try {
+    await db.delete(caseFieldOverrides).where(and(eq(caseFieldOverrides.stepCode, stepCode), eq(caseFieldOverrides.fieldKey, fieldKey)));
+    await audit(guard.user.id, "reset_case_field", "case_field", `${stepCode}.${fieldKey}`, entry.label);
+    revalidatePath("/steps");
+    return fail(`فیلد «${entry.label}» به پیش‌فرض سامانه بازگشت.`);
+  } catch {
+    return fail("بازنشانی فیلد انجام نشد؛ دوباره تلاش کنید.");
   }
 }

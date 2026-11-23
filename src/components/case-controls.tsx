@@ -23,7 +23,7 @@ export function DocumentUpload({ caseId, openRequests = [] }: { caseId: string; 
 export function PhotoUpload({ caseId, hasPhoto }: { caseId: string; hasPhoto: boolean }) {
   const [state, action, pending] = useActionState(uploadPhotoAction.bind(null, caseId), initialActionState);
   return <form action={action} className="upload-form photo-upload-form">
-    {!hasPhoto && <small className="photo-required-note">تصویر پرسنلی برای ارسال پرونده الزامی است؛ بدون آن گام «ارسال برای بررسی» ادامه نمی‌یابد.</small>}
+    {!hasPhoto && <small className="photo-required-note">تصویر پرسنلی طبق تنظیمات مدیریت مراحل ثبت پرونده کنترل می‌شود؛ در صورت الزامی‌بودن، ارسال بدون آن ادامه نمی‌یابد.</small>}
     {hasPhoto && <small>تصویر جدید جایگزین تصویر فعلی می‌شود.</small>}
     <label>انتخاب تصویر پرسنلی<input name="file" type="file" accept="image/png,image/jpeg" required /></label>
     <small>PNG یا JPEG؛ حداکثر ۵۰۰ کیلوبایت. تصویر فقط برای کاربران مجاز این پرونده نمایش داده می‌شود.</small>

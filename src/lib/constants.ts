@@ -41,6 +41,11 @@ export const auditActionLabels: Record<string, string> = {
   verify_email: "تأیید ایمیل حساب", resend_email_verification: "ارسال مجدد پیوند تأیید ایمیل", change_email_requested: "درخواست تغییر ایمیل (در انتظار تأیید)",
   role_permission_changed: "تغییر مجوز نقش در ماتریس دسترسی", role_defaults_restored: "بازنشانی مجوزهای پیش‌فرض نقش",
   custom_role_created: "ایجاد نقش سفارشی", custom_role_updated: "ویرایش نقش سفارشی", custom_role_deleted: "حذف نقش سفارشی",
+  // الحاقیهٔ ۲.۲۵.۰ — برچسب‌های ممیزی مدیریت مراحل ثبت پرونده
+  add_case_step: "افزودن مرحلهٔ سفارشی", edit_case_step: "ویرایش عنوان/توضیح مرحله", delete_case_step: "حذف مرحلهٔ سفارشی",
+  activate_case_step: "فعال‌سازی مرحله", deactivate_case_step: "غیرفعال‌سازی مرحله", reorder_case_steps: "تغییر ترتیب مراحل",
+  // الحاقیهٔ ۲.۲۶.۰ — برچسب‌های ممیزی ویرایش فیلدهای ثابت مراحل
+  edit_case_field: "ویرایش فیلد ثابت مرحله", reset_case_field: "بازنشانی فیلد ثابت به پیش‌فرض",
 };
 export const documentRequestStatusLabels = { open: "در انتظار", fulfilled: "بارگذاری شد", explained: "توضیح داده شد" } as const;
 export const activityRecordKindLabels = { activity: "فعالیت قرآنی", teaching: "تدریس", judging: "داوری", competition: "شرکت در مسابقات", research: "پژوهش" } as const;

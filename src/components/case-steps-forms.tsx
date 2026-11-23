@@ -18,6 +18,7 @@ import { JuzPickerModal, juzPartsSummaryFa } from "@/components/juz-picker-modal
 import { SectionUpload, type DocSlot } from "@/components/doc-upload";
 import { DynamicFieldsRenderer, type DynValues } from "@/components/dynamic-fields";
 import { carryOverAnswers, type FormAnswers, type FormConfig } from "@/lib/form-config";
+import { resolvedCaseField, type CaseFieldMetaMap } from "@/lib/case-field-catalog";
 
 const faDigitsLocal = (value: string) => value.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);
 
@@ -82,7 +83,12 @@ function ChangeReasonField({ required }: { required: boolean }) {
 
 /* --------------------------- مرحلهٔ ۱ — هویتی --------------------------- */
 
-export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason, flagSections }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; universityField?: string; universityType?: string; universityCenterName?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean; flagSections?: string[] }) {
+// الحاقیهٔ ۲.۲۶.۰ — عنوان، متن راهنما، الزام و نمایان‌بودن فیلدهای ثابت از
+// meta (کاتالوگ + override مدیریت مراحل) می‌آید؛ فیلد مخفی رندر نمی‌شود و
+// بدون meta همه‌چیز مطابق پیش‌فرض کاتالوگ است (رفتار ۲.۲۵.۰ حفظ می‌شود).
+export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOptions, needsChangeReason, flagSections, meta }: { caseId?: string; hasNationalId?: boolean; defaults?: Partial<IdentityValues> & { universityLevel?: string; universityField?: string; universityType?: string; universityCenterName?: string; seminaryLevel?: string; universityDocName?: string; seminaryDocName?: string }; sourceOptions?: { value: string; label: string }[]; needsChangeReason?: boolean; flagSections?: string[]; meta?: CaseFieldMetaMap }) {
+  const F = (key: string) => resolvedCaseField(meta, key);
+  const nameReq = F("identity.fullName");
   const [state, action, pending] = useActionState<ActionState, FormData>(saveIdentityStepAction, initialActionState);
   const [values, setValues] = useState<IdentityValues>(() => ({
     firstName: defaults?.firstName || "", lastName: defaults?.lastName || "", fatherName: defaults?.fatherName || "", nationalId: "",
@@ -122,43 +128,43 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
     {state.error && <div className="form-error profile-error" role="alert">{state.error} {state.existingCaseId && <Link className="duplicate-link" href={`/cases/${state.existingCaseId}`}>مشاهده پرونده موجود ←</Link>}</div>}
     <DuplicateWarning state={state} onAcknowledge={acknowledge} pending={pending} />
     <section className={"form-section" + flagClass(flagSections, "identity-fields")} data-section="identity-fields">
-      <div className="form-section-head"><h2>اطلاعات هویتی و تماس</h2><p>همه فیلدهای ستاره‌دار (<i className="req-mark">*</i>) اجباری هستند؛ فقط ایمیل اختیاری است. پس از ثبت موفق، مرحلهٔ بعدی خودکار باز می‌شود.</p></div>
+      <div className="form-section-head"><h2>{F("identity.section.identity").label}</h2><p>فیلدهای ستاره‌دار (<i className="req-mark">*</i>) اجباری هستند؛ الزام و عنوان هر فیلد از تنظیمات مدیریت مراحل سامانه پیروی می‌کند. پس از ثبت موفق، مرحلهٔ بعدی خودکار باز می‌شود.</p></div>
       <div className="form-grid">
-        <label>نام <i>*</i><input required {...bind("firstName")} maxLength={80} placeholder="نام" /></label>
-        <label>نام خانوادگی <i>*</i><input required {...bind("lastName")} maxLength={100} placeholder="نام خانوادگی" /></label>
-        <label>نام پدر <i>*</i><input required {...bind("fatherName")} maxLength={80} placeholder="نام پدر" /></label>
-        <label>کد ملی <i>*</i><input required={!hasNationalId} {...bind("nationalId")} inputMode="numeric" maxLength={10} placeholder={hasNationalId ? "ثبت شده؛ برای تغییر وارد کنید" : "کد ملی ۱۰ رقمی"} /><small>کد ملی برای جست‌وجو محافظت و در فهرست‌ها پوشانده می‌شود.</small></label>
-        <label>شماره شناسنامه <i>*</i><input required {...bind("idCardNumber")} inputMode="numeric" maxLength={10} placeholder="مثلاً ۱۲۳۴۵۶" /><small>شماره شناسنامه بدون صفرهای ابتدایی.</small></label>
-        <label>محل صدور شناسنامه <i>*</i><input required {...bind("idIssuePlace")} maxLength={80} placeholder="مثلاً تهران" /></label>
-        <label>تاریخ تولد شمسی <i>*</i><JalaliDateInput name="birthDate" required ariaLabel="تاریخ تولد شمسی" value={values.birthDate} onChange={(jalali) => setValues((current) => ({ ...current, birthDate: jalali }))} /><small>انتخاب تاریخ فقط از تقویم شمسی بازشونده.</small></label>
-        <label>جنسیت <i>*</i><select name="gender" required data-selected-value={values.gender} value={values.gender} onChange={(event) => setValues((current) => ({ ...current, gender: event.target.value }))}><option value="">انتخاب کنید</option><option value="female">زن</option><option value="male">مرد</option></select></label>
-        <label>شماره همراه <i>*</i><input required {...bind("phone")} inputMode="tel" maxLength={11} placeholder="۰۹۱۲۱۲۳۴۵۶۷" /></label>
-        <label>شماره همراه جایگزین <i>*</i><input required {...bind("alternatePhone")} inputMode="tel" maxLength={11} placeholder="شماره همراه دوم" /></label>
-        <label>ایمیل تماس (اختیاری)<input {...bind("contactEmail")} type="email" dir="ltr" placeholder="example@email.com" /></label>
-        {sourceOptions && sourceOptions.length > 0 && <label>منبع ثبت اطلاعات<select name="source" data-selected-value={source} value={source} onChange={(event) => setSource(event.target.value)}>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>در صورت ورود اطلاعات از فرم کاغذی، گزینه فرم کاغذی را انتخاب کنید.</small></label>}
+        {!F("identity.firstName").hidden && <label>{F("identity.firstName").label} {nameReq.required && <i>*</i>}<input required={nameReq.required} {...bind("firstName")} maxLength={80} placeholder="نام" /></label>}
+        {!F("identity.lastName").hidden && <label>{F("identity.lastName").label} {nameReq.required && <i>*</i>}<input required={nameReq.required} {...bind("lastName")} maxLength={100} placeholder="نام خانوادگی" /></label>}
+        {!F("identity.fatherName").hidden && <label>{F("identity.fatherName").label} {F("identity.fatherName").required && <i>*</i>}<input required={F("identity.fatherName").required} {...bind("fatherName")} maxLength={80} placeholder="نام پدر" /></label>}
+        {!F("identity.nationalId").hidden && <label>{F("identity.nationalId").label} {F("identity.nationalId").required && <i>*</i>}<input required={F("identity.nationalId").required && !hasNationalId} {...bind("nationalId")} inputMode="numeric" maxLength={10} placeholder={hasNationalId ? "ثبت شده؛ برای تغییر وارد کنید" : "کد ملی ۱۰ رقمی"} />{F("identity.nationalId").help && <small>{F("identity.nationalId").help}</small>}</label>}
+        {!F("identity.idCardNumber").hidden && <label>{F("identity.idCardNumber").label} {F("identity.idCardNumber").required && <i>*</i>}<input required={F("identity.idCardNumber").required} {...bind("idCardNumber")} inputMode="numeric" maxLength={10} placeholder="مثلاً ۱۲۳۴۵۶" />{F("identity.idCardNumber").help && <small>{F("identity.idCardNumber").help}</small>}</label>}
+        {!F("identity.idIssuePlace").hidden && <label>{F("identity.idIssuePlace").label} {F("identity.idIssuePlace").required && <i>*</i>}<input required={F("identity.idIssuePlace").required} {...bind("idIssuePlace")} maxLength={80} placeholder="مثلاً تهران" /></label>}
+        {!F("identity.birthDate").hidden && <label>{F("identity.birthDate").label} {F("identity.birthDate").required && <i>*</i>}<JalaliDateInput name="birthDate" required={F("identity.birthDate").required} ariaLabel={F("identity.birthDate").label} value={values.birthDate} onChange={(jalali) => setValues((current) => ({ ...current, birthDate: jalali }))} />{F("identity.birthDate").help && <small>{F("identity.birthDate").help}</small>}</label>}
+        {!F("identity.gender").hidden && <label>{F("identity.gender").label} {F("identity.gender").required && <i>*</i>}<select name="gender" required={F("identity.gender").required} data-selected-value={values.gender} value={values.gender} onChange={(event) => setValues((current) => ({ ...current, gender: event.target.value }))}><option value="">انتخاب کنید</option><option value="female">زن</option><option value="male">مرد</option></select></label>}
+        {!F("identity.phone").hidden && <label>{F("identity.phone").label} {F("identity.phone").required && <i>*</i>}<input required={F("identity.phone").required} {...bind("phone")} inputMode="tel" maxLength={11} placeholder="۰۹۱۲۱۲۳۴۵۶۷" /></label>}
+        {!F("identity.alternatePhone").hidden && <label>{F("identity.alternatePhone").label} {F("identity.alternatePhone").required && <i>*</i>}<input required={F("identity.alternatePhone").required} {...bind("alternatePhone")} inputMode="tel" maxLength={11} placeholder="شماره همراه دوم" /></label>}
+        {!F("identity.contactEmail").hidden && <label>{F("identity.contactEmail").label}{!F("identity.contactEmail").required ? " (اختیاری)" : ""} {F("identity.contactEmail").required && <i>*</i>}<input required={F("identity.contactEmail").required} {...bind("contactEmail")} type="email" dir="ltr" placeholder="example@email.com" /></label>}
+        {sourceOptions && sourceOptions.length > 0 && <label>{F("identity.source").label}<select name="source" data-selected-value={source} value={source} onChange={(event) => setSource(event.target.value)}>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>در صورت ورود اطلاعات از فرم کاغذی، گزینه فرم کاغذی را انتخاب کنید.</small></label>}
       </div>
     </section>
     {/* الحاقیهٔ ۲.۱۴.۱ — تحصیلات دانشگاهی و حوزوی با بارگذاری مدرک در همان بخش
         الحاقیهٔ ۲.۱۴.۲ — دو کارت کنار هم (در نمایش باریک زیر هم می‌شوند) */}
     <section className="form-section">
-      <div className="form-section-head"><h2>تحصیلات</h2><p>مقطع تحصیلی دانشگاهی (از بی‌سواد تا دکترا) و وضعیت تحصیلات حوزوی (سطح ۱ تا سطح ۴) را انتخاب کنید و در صورت داشتن مدرک، آن را در همان بخش بارگذاری کنید. هر دو بخش اختیاری‌اند و اگر مقطعی انتخاب نشود، اطلاعات قبلی پرونده دست‌نخورده می‌ماند.</p></div>
+      <div className="form-section-head"><h2>{F("identity.section.education").label}</h2><p>مقطع تحصیلی دانشگاهی (از بی‌سواد تا دکترا) و وضعیت تحصیلات حوزوی (سطح ۱ تا سطح ۴) را انتخاب کنید و در صورت داشتن مدرک، آن را در همان بخش بارگذاری کنید. هر دو بخش اختیاری‌اند و اگر مقطعی انتخاب نشود، اطلاعات قبلی پرونده دست‌نخورده می‌ماند.</p></div>
       <div className="form-grid education-cards">
         <div className="writings-block">
-          <h3 className="form-subhead">تحصیلات دانشگاهی</h3>
+          <h3 className="form-subhead">{F("identity.section.university").label}</h3>
           <div className="memorizer-block">
-            <label>مقطع تحصیلی<select data-selected-value={universityLevel} value={universityLevel} onChange={(event) => setUniversityLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.university.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
-            {degreeLevel && <label>رشته تحصیلی<input name="universityField" maxLength={120} placeholder="نام رشته تحصیلی" value={universityField} onChange={(event) => setUniversityField(event.target.value)} list="university-field-options" /><small>می‌توانید تایپ کنید یا از پیشنهادها انتخاب کنید.</small><datalist id="university-field-options">{UNIVERSITY_FIELD_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist></label>}
-            {degreeLevel && <label>نوع دانشگاه<select name="universityType" data-selected-value={universityType} value={universityType} onChange={(event) => { setUniversityType(event.target.value); if (!event.target.value) setUniversityCenterName(""); }}><option value="">انتخاب کنید (اختیاری)</option>{UNIVERSITY_TYPE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
-            {degreeLevel && universityType && <label>نام دانشگاه<input name="universityCenterName" maxLength={180} placeholder="نام دقیق دانشگاه / واحد / مرکز" value={universityCenterName} onChange={(event) => setUniversityCenterName(event.target.value)} /></label>}
-            <SectionUpload section="university" slots={universitySlot} onChange={setUniversitySlot} label="بارگذاری مدرک تحصیلی دانشگاهی" />
+            {!F("identity.universityLevel").hidden && <label>{F("identity.universityLevel").label}<select data-selected-value={universityLevel} value={universityLevel} onChange={(event) => setUniversityLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.university.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>}
+            {degreeLevel && !F("identity.universityField").hidden && <label>{F("identity.universityField").label}<input name="universityField" maxLength={120} placeholder="نام رشته تحصیلی" value={universityField} onChange={(event) => setUniversityField(event.target.value)} list="university-field-options" />{F("identity.universityField").help && <small>{F("identity.universityField").help}</small>}<datalist id="university-field-options">{UNIVERSITY_FIELD_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist></label>}
+            {degreeLevel && !F("identity.universityType").hidden && <label>{F("identity.universityType").label}<select name="universityType" data-selected-value={universityType} value={universityType} onChange={(event) => { setUniversityType(event.target.value); if (!event.target.value) setUniversityCenterName(""); }}><option value="">انتخاب کنید (اختیاری)</option>{UNIVERSITY_TYPE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
+            {degreeLevel && universityType && !F("identity.universityCenterName").hidden && <label>{F("identity.universityCenterName").label}<input name="universityCenterName" maxLength={180} placeholder="نام دقیق دانشگاه / واحد / مرکز" value={universityCenterName} onChange={(event) => setUniversityCenterName(event.target.value)} /></label>}
+            <SectionUpload section="university" slots={universitySlot} onChange={setUniversitySlot} label={F("identity.universityDoc").label} />
             {defaults?.universityDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.universityDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
           </div>
         </div>
         <div className="writings-block">
-          <h3 className="form-subhead">تحصیلات حوزوی</h3>
+          <h3 className="form-subhead">{F("identity.section.seminary").label}</h3>
           <div className="memorizer-block">
-            <label>سطح تحصیلات حوزوی<select data-selected-value={seminaryLevel} value={seminaryLevel} onChange={(event) => setSeminaryLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.seminary.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
-            <SectionUpload section="seminary" slots={seminarySlot} onChange={setSeminarySlot} label="بارگذاری مدرک تحصیلی حوزوی" />
+            {!F("identity.seminaryLevel").hidden && <label>{F("identity.seminaryLevel").label}<select data-selected-value={seminaryLevel} value={seminaryLevel} onChange={(event) => setSeminaryLevel(event.target.value)}><option value="">انتخاب کنید (اختیاری)</option>{educationLevelOptions.seminary.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>}
+            <SectionUpload section="seminary" slots={seminarySlot} onChange={setSeminarySlot} label={F("identity.seminaryDoc").label} />
             {defaults?.seminaryDocName && <small>مدرک ثبت‌شدهٔ فعلی: {defaults.seminaryDocName} — بارگذاری فایل تازه، مدرک این بخش را جایگزین می‌کند.</small>}
           </div>
         </div>
@@ -171,7 +177,10 @@ export function IdentityStepForm({ caseId, hasNationalId, defaults, sourceOption
 
 /* ------------------------ مرحلهٔ ۲ — مکانی و فعالیت ------------------------ */
 
-export function LocationStepForm({ caseId, provinces, counties, activityProvinces, activityCounties, defaults, needsChangeReason, flagSections }: { caseId: string; provinces: Province[]; counties: County[]; activityProvinces: Province[]; activityCounties: County[]; defaults: { provinceId: number | null; countyId: number | null; activityProvinceId: number | null; activityCountyId: number | null } & Partial<LocationValues>; needsChangeReason?: boolean; flagSections?: string[] }) {
+// الحاقیهٔ ۲.۲۶.۰ — فیلدهای ثابت مرحلهٔ ۲ از meta می‌آیند (عنوان/راهنما/الزام/مخفی)
+export function LocationStepForm({ caseId, provinces, counties, activityProvinces, activityCounties, defaults, needsChangeReason, flagSections, meta }: { caseId: string; provinces: Province[]; counties: County[]; activityProvinces: Province[]; activityCounties: County[]; defaults: { provinceId: number | null; countyId: number | null; activityProvinceId: number | null; activityCountyId: number | null } & Partial<LocationValues>; needsChangeReason?: boolean; flagSections?: string[]; meta?: CaseFieldMetaMap }) {
+  const F = (key: string) => resolvedCaseField(meta, key);
+  const residenceReq = F("location.residence");
   const [state, action, pending] = useActionState<ActionState, FormData>(saveLocationStepAction, initialActionState);
   const [provinceId, setProvinceId] = useState(String(defaults.provinceId || ""));
   const [countyId, setCountyId] = useState(String(defaults.countyId || ""));
@@ -185,23 +194,23 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
     <input type="hidden" name="caseId" value={caseId} />
     {state.error && <div className="form-error profile-error" role="alert">{state.error}</div>}
     <section className="form-section">
-      <div className="form-section-head"><h2>سکونت و محل فعالیت قرآنی</h2><p>استان و شهرستان سکونت برای تکمیل این مرحله الزامی است؛ بقیهٔ فیلدها اختیاری‌اند و محل فعالیت قرآنی به‌صورت جداگانه ثبت می‌شود.</p></div>
+      <div className="form-section-head"><h2>{F("location.section.residence").label} و {F("location.section.activity").label}</h2><p>{residenceReq.required ? "استان و شهرستان سکونت برای تکمیل این مرحله الزامی است" : "همهٔ فیلدهای این مرحله بر اساس تنظیمات مدیریت مراحل اختیاری شده‌اند"}؛ بقیهٔ فیلدها اختیاری‌اند و محل فعالیت قرآنی به‌صورت جداگانه ثبت می‌شود.</p></div>
       <div className={"residence-wrap" + flagClass(flagSections, "residence")} data-section="residence">
-      <h3 className="form-subhead">محل سکونت</h3>
+      <h3 className="form-subhead">{F("location.section.residence").label}</h3>
       <div className="form-grid">
-        <label>استان <i>*</i><select name="provinceId" required data-selected-value={provinceId} value={provinceId} onChange={(event) => { setProvinceId(event.target.value); setCountyId(""); }}><option value="">انتخاب استان</option>{provinces.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        <label>شهرستان <i>*</i><select name="countyId" required data-selected-value={countyId} value={countyId} onChange={(event) => setCountyId(event.target.value)}><option value="">انتخاب شهرستان</option>{counties.filter((item) => String(item.provinceId) === provinceId).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><small>فهرست پیش‌فرض شامل شهرستان‌های مرکز استان است و توسط مدیر قابل تکمیل است.</small></label>
-        <label>شهر / محل سکونت<input {...bind("city")} maxLength={120} placeholder="نام شهر" /></label>
-        <label>کد پستی<input {...bind("postalCode")} inputMode="numeric" maxLength={10} placeholder="کد پستی ۱۰ رقمی" /></label>
-        <label className="full-field">نشانی<textarea {...bind("address")} maxLength={1000} rows={3} placeholder="نشانی محل سکونت" /></label>
+        {!F("location.provinceId").hidden && <label>{F("location.provinceId").label} {residenceReq.required && <i>*</i>}<select name="provinceId" required={residenceReq.required} data-selected-value={provinceId} value={provinceId} onChange={(event) => { setProvinceId(event.target.value); setCountyId(""); }}><option value="">انتخاب استان</option>{provinces.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}
+        {!F("location.countyId").hidden && <label>{F("location.countyId").label} {residenceReq.required && <i>*</i>}<select name="countyId" required={residenceReq.required} data-selected-value={countyId} value={countyId} onChange={(event) => setCountyId(event.target.value)}><option value="">انتخاب شهرستان</option>{counties.filter((item) => String(item.provinceId) === provinceId).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>{F("location.countyId").help && <small>{F("location.countyId").help}</small>}</label>}
+        {!F("location.city").hidden && <label>{F("location.city").label}<input {...bind("city")} maxLength={120} placeholder="نام شهر" /></label>}
+        {!F("location.postalCode").hidden && <label>{F("location.postalCode").label}<input {...bind("postalCode")} inputMode="numeric" maxLength={10} placeholder="کد پستی ۱۰ رقمی" /></label>}
+        {!F("location.address").hidden && <label className="full-field">{F("location.address").label}<textarea {...bind("address")} maxLength={1000} rows={3} placeholder="نشانی محل سکونت" /></label>}
       </div>
       </div>
-      <h3 className="form-subhead">محل فعالیت قرآنی</h3>
+      <h3 className="form-subhead">{F("location.section.activity").label}</h3>
       <div className="form-grid">
-        <label>استان فعالیت<select name="activityProvinceId" data-selected-value={activityProvinceId} value={activityProvinceId} onChange={(event) => { setActivityProvinceId(event.target.value); setActivityCountyId(""); }}><option value="">انتخاب استان</option>{activityProvinces.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        <label>شهرستان فعالیت<select name="activityCountyId" data-selected-value={activityCountyId} value={activityCountyId} onChange={(event) => setActivityCountyId(event.target.value)}><option value="">انتخاب شهرستان</option>{activityCounties.filter((item) => String(item.provinceId) === activityProvinceId).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        <label>محل فعالیت قرآنی<input {...bind("activityPlace")} maxLength={180} placeholder="مثلاً مسجد، مؤسسه یا مرکز فرهنگی" /></label>
-        <label>مؤسسه قرآنی محل فعالیت<input {...bind("organization")} maxLength={180} placeholder="نام مؤسسه یا سازمان" /></label>
+        {!F("location.activityProvinceId").hidden && <label>{F("location.activityProvinceId").label}<select name="activityProvinceId" data-selected-value={activityProvinceId} value={activityProvinceId} onChange={(event) => { setActivityProvinceId(event.target.value); setActivityCountyId(""); }}><option value="">انتخاب استان</option>{activityProvinces.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}
+        {!F("location.activityCountyId").hidden && <label>{F("location.activityCountyId").label}<select name="activityCountyId" data-selected-value={activityCountyId} value={activityCountyId} onChange={(event) => setActivityCountyId(event.target.value)}><option value="">انتخاب شهرستان</option>{activityCounties.filter((item) => String(item.provinceId) === activityProvinceId).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}
+        {!F("location.activityPlace").hidden && <label>{F("location.activityPlace").label}<input {...bind("activityPlace")} maxLength={180} placeholder="مثلاً مسجد، مؤسسه یا مرکز فرهنگی" /></label>}
+        {!F("location.organization").hidden && <label>{F("location.organization").label}<input {...bind("organization")} maxLength={180} placeholder="نام مؤسسه یا سازمان" /></label>}
       </div>
     </section>
     <ChangeReasonField required={Boolean(needsChangeReason)} />
@@ -211,7 +220,9 @@ export function LocationStepForm({ caseId, provinces, counties, activityProvince
 
 /* ------------------- مرحلهٔ ۳ — تخصص‌ها و سوابق ------------------- */
 
-export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, dynForms, flagSections }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; dynForms?: Array<{ specialtyId: number; title: string; version: number; config: FormConfig; saved: FormAnswers }>; flagSections?: string[] }) {
+// الحاقیهٔ ۲.۲۶.۰ — فیلدهای ثابت مرحلهٔ ۳ از meta می‌آیند (عنوان بخش‌ها، شغل، توضیحات تکمیلی)
+export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChangeReason, dynForms, flagSections, meta }: { caseId: string; specialties: Specialty[]; defaults: { specialtyIds: number[]; specialtyDetails: StepExistingSpecialtyDetail[]; writings: StepExistingWriting[]; workHistory: StepExistingWorkHistory[]; courses: StepExistingCourse[]; activities: StepExistingActivity[]; job?: string; notes?: string }; needsChangeReason?: boolean; dynForms?: Array<{ specialtyId: number; title: string; version: number; config: FormConfig; saved: FormAnswers }>; flagSections?: string[]; meta?: CaseFieldMetaMap }) {
+  const F = (key: string) => resolvedCaseField(meta, key);
   const [state, action, pending] = useActionState<ActionState, FormData>(saveSpecialtiesStepAction, initialActionState);
   // الحاقیهٔ ۲.۲۳.۰ — پاسخ‌های فرم‌های پویا؛ پاسخ‌های ذخیره‌شدهٔ قبلی (حتی از
   // نسخهٔ قدیمی‌تر فرم) با carryOverAnswers پیش‌پر می‌شوند و بقیه خالی می‌مانند.
@@ -326,7 +337,7 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
     <input type="hidden" name="memorizationCertType" value={memorizationCertType} />
     {state.error && <div className="form-error profile-error" role="alert">{state.error}</div>}
     <section className="form-section">
-      <div className="form-section-head"><h2>تخصص‌های قرآنی</h2><p>برای تکمیل این مرحله، انتخاب حداقل یک تخصص الزامی است و جزئیات هر تخصص دارای جزئیات (میزان حفظ، سطح قرائت یا نقش‌ها) باید کامل شود.</p></div>
+      <div className="form-section-head"><h2>{F("specialties.section.grid").label}</h2><p>{F("specialties.minOne").required ? "برای تکمیل این مرحله، انتخاب حداقل یک تخصص الزامی است و جزئیات هر تخصص دارای جزئیات (میزان حفظ، سطح قرائت یا نقش‌ها) باید کامل شود." : "انتخاب تخصص بر اساس تنظیمات مدیریت مراحل اختیاری شده است؛ جزئیات هر تخصص انتخاب‌شده باید کامل شود."}</p></div>
       <div className={"specialty-grid" + flagClass(flagSections, "specialty-grid")} data-section="specialty-grid">{specialties.map((item) => <label key={item.id}><input type="checkbox" name="specialties" value={item.id} checked={selectedSpecialties.has(item.id)} onChange={() => toggleSpecialty(item.id)} /><span>{item.title}</span></label>)}</div>
       <div className={"specialty-details-wrap" + flagClass(flagSections, "specialty-details")} data-section="specialty-details">
       {specialties.filter((item) => {
@@ -360,7 +371,8 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       </div>)}
       </div>
       {authorSpecialty && selectedSpecialties.has(authorSpecialty.id) && <div className="writings-block">
-        {defaults.writings.length > 0 && <div className="education-existing"><h3 className="form-subhead">آثار ثبت‌شده این پرونده</h3><ul>{defaults.writings.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.workTypeLabel, item.topic].filter(Boolean).join(" · ")}</small></li>)}</ul><small>حذف یا افزودن به این فهرست از صفحه جزئیات پرونده نیز امکان‌پذیر است؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
+        <h3 className="form-subhead">{F("specialties.section.writings").label}</h3>
+        {defaults.writings.length > 0 && <div className="education-existing"><ul>{defaults.writings.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.workTypeLabel, item.topic].filter(Boolean).join(" · ")}</small></li>)}</ul><small>حذف یا افزودن به این فهرست از صفحه جزئیات پرونده نیز امکان‌پذیر است؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {writingRows.length > 0 && <div className="education-rows">{writingRows.map((row, index) => <div className="education-row" key={index}><div className="writing-row-grid">
           <label>نوع اثر <i>*</i><select value={row.workType} onChange={(event) => updateWritingRow(index, { workType: event.target.value })}>{Object.entries(writingTypeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <label>نام کتاب / مقاله <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateWritingRow(index, { title: event.target.value })} placeholder="مثلاً نگاهی به فضایل قرآن" /></label>
@@ -369,11 +381,12 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
         <button type="button" className="secondary-button education-add" onClick={addWritingRow}><Plus size={16} /> افزودن اثر (کتاب / مقاله)</button>
       </div>}
       <div className="form-grid">
-        <label>شغل<input name="job" defaultValue={defaults.job || ""} maxLength={120} placeholder="اختیاری؛ مثلاً دانشجو، معلم، کارمند" /><small>فیلد مستقل از مؤسسه قرآنی محل فعالیت ثبت می‌شود.</small></label>
-        <label className="full-field">توضیحات تکمیلی<textarea name="notes" defaultValue={defaults.notes || ""} maxLength={4000} rows={3} placeholder="در صورت نیاز" /></label>
+        {!F("specialties.job").hidden && <label>{F("specialties.job").label}<input name="job" defaultValue={defaults.job || ""} maxLength={120} placeholder="اختیاری؛ مثلاً دانشجو، معلم، کارمند" />{F("specialties.job").help && <small>{F("specialties.job").help}</small>}</label>}
+        {!F("specialties.notes").hidden && <label className="full-field">{F("specialties.notes").label}<textarea name="notes" defaultValue={defaults.notes || ""} maxLength={4000} rows={3} placeholder="در صورت نیاز" /></label>}
       </div>
       <div className="writings-block">
-        {defaults.workHistory.length > 0 && <div className="education-existing"><h3 className="form-subhead">سوابق شغلی ثبت‌شده این پرونده</h3><ul>{defaults.workHistory.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.employer, item.position, item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
+        <h3 className="form-subhead">{F("specialties.section.workHistory").label}</h3>
+        {defaults.workHistory.length > 0 && <div className="education-existing"><ul>{defaults.workHistory.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.employer, item.position, item.startDate ? "از " + faDigitsLocal(isoToJalali(item.startDate)) : "", item.endDate ? "تا " + faDigitsLocal(isoToJalali(item.endDate)) : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {workRows.length > 0 && <div className="education-rows">{workRows.map((row, index) => <div className="education-row" key={index}><div className="writing-row-grid">
           <label>عنوان یا محل اشتغال <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateWorkRow(index, { title: event.target.value })} placeholder="مثلاً دبیری آموزش و پرورش" /></label>
           <label>نام سازمان یا مجموعه<input value={row.employer} maxLength={180} onChange={(event) => updateWorkRow(index, { employer: event.target.value })} placeholder="اختیاری" /></label>
@@ -390,7 +403,7 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       </div>
       {/* الحاقیهٔ ۲.۱۴.۰ — دوره‌های گذرانده‌شده (انتقال از فرم قبلی ثبت‌نام) */}
       <div className="writings-block">
-        <h3 className="form-subhead">دوره‌های گذرانده‌شده</h3>
+        <h3 className="form-subhead">{F("specialties.section.courses").label}</h3>
         {defaults.courses.length > 0 && <div className="education-existing"><ul>{defaults.courses.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.provider, item.fieldLabel, item.completedDateLabel, item.hours ? `${item.hours} ساعت` : ""].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {courseRows.length > 0 && <div className="education-rows">{courseRows.map((row, index) => <div className="education-row" key={index}><div className="work-row-grid">
           <label>نام دوره <i>*</i><input value={row.title} maxLength={180} onChange={(event) => updateCourseRow(index, { title: event.target.value })} placeholder="مثلاً دورهٔ روخوانی و روان‌خوانی" /></label>
@@ -405,7 +418,7 @@ export function SpecialtiesStepForm({ caseId, specialties, defaults, needsChange
       </div>
       {/* الحاقیهٔ ۲.۱۴.۰ — سوابق فعالیت قرآنی (انتقال از فرم قبلی ثبت‌نام) */}
       <div className="writings-block">
-        <h3 className="form-subhead">سوابق فعالیت قرآنی</h3>
+        <h3 className="form-subhead">{F("specialties.section.activities").label}</h3>
         {defaults.activities.length > 0 && <div className="education-existing"><ul>{defaults.activities.map((item) => <li key={item.id}><strong>{item.title}</strong><small>{[item.kindLabel, item.fieldLabel, item.organization, item.position, item.periodLabel].filter(Boolean).join(" · ") || "بدون جزئیات"}</small></li>)}</ul><small>ویرایش یا حذف این موارد از صفحه جزئیات پرونده انجام می‌شود؛ در این فرم فقط ردیف تازه افزوده می‌شود.</small></div>}
         {activityRows.length > 0 && <div className="education-rows">{activityRows.map((row, index) => <div className="education-row" key={index}><div className="work-row-grid">
           <label>نوع فعالیت <i>*</i><select value={row.kind} onChange={(event) => updateActivityRow(index, { kind: event.target.value, field: "" })}><option value="">انتخاب کنید</option>{Object.entries(activityRecordKindLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>

@@ -3,6 +3,9 @@ import { db } from "@/db";
 import { activistSpecialties, activists, applications, counties, documents, expertReferrals, provinces, specialties, userSpecialties } from "@/db/schema";
 import type { MaybeSessionUser, SessionUser } from "@/lib/auth";
 import { referenceProvinces, referenceSpecialties } from "@/lib/constants";
+import { documentsChecks, identityChecks, locationChecks, specialtiesChecks } from "@/lib/case-steps";
+import { loadCaseFieldMeta } from "@/lib/case-field-meta";
+import type { CaseFieldMetaMap } from "@/lib/case-field-catalog";
 
 export async function ensureReferenceData() {
   await db.insert(provinces).values(referenceProvinces.map(([name]) => ({ name }))).onConflictDoNothing();
@@ -45,30 +48,24 @@ export async function getCaseForUser(user: MaybeSessionUser, id: string, opts?: 
     .where(and(eq(applications.id, id), scopeCondition(user), opts?.allowDeleted ? undefined : isNull(applications.deletedAt))).limit(1);
   return row || null;
 }
-export function missingRequired(activist: typeof activists.$inferSelect, specialtyCount: number, documentCount: number, photoOk = true) {
-  const missing: string[] = [];
-  if (!activist.firstName || !activist.lastName) missing.push("نام و نام خانوادگی");
-  if (!activist.fatherName) missing.push("نام پدر");
-  if (!activist.nationalIdHash) missing.push("کد ملی معتبر");
-  if (!activist.idCardNumber) missing.push("شماره شناسنامه");
-  if (!activist.idIssuePlace) missing.push("محل صدور شناسنامه");
-  if (!activist.birthDate) missing.push("تاریخ تولد شمسی");
-  if (!activist.gender) missing.push("جنسیت");
-  if (!activist.phone) missing.push("شماره تماس");
-  if (!activist.alternatePhone) missing.push("شماره همراه جایگزین");
-  if (!activist.provinceId || !activist.countyId) missing.push("استان و شهرستان");
-  if (!specialtyCount) missing.push("حداقل یک تخصص");
-  if (!documentCount) missing.push("حداقل یک مدرک");
-  // الحاقیهٔ ۲.۹.۳: تصویر پرسنلی برای ارسال پرونده الزامی است؛ بدون آن گام
-  // «آماده‌سازی ارسال» و «ارسال برای بررسی» با همین پیام متوقف می‌شود.
-  if (!photoOk) missing.push("تصویر پرسنلی");
+// الحاقیهٔ ۲.۲۶.۰ — گیت ارسال از موتور مرحله‌ها می‌خواند: برچسب، الزام و
+// مخفی‌بودن فیلدهای ثابت از override مدیر (/steps) پیروی می‌کند؛ در نبود meta
+// (فراخوانی‌های کهن) پیش‌فرض کاتالوگ اعمال می‌شود.
+export function missingRequired(activist: typeof activists.$inferSelect, specialtyCount: number, documentCount: number, photoOk = true, fieldMeta?: CaseFieldMetaMap) {
+  const missing: string[] = [
+    ...identityChecks(activist, fieldMeta).map((check) => check.label),
+    ...locationChecks(activist, fieldMeta).map((check) => check.label),
+    ...specialtiesChecks({ specialtyCount, specialtyDetailMissing: [] }, fieldMeta).map((check) => check.label),
+    ...documentsChecks({ evidenceCount: documentCount, photoOk }, fieldMeta).map((check) => check.label),
+  ];
   return missing;
 }
 export async function completeness(activist: typeof activists.$inferSelect, applicationId: string) {
-  const [specs, docs] = await Promise.all([
+  const [specs, docs, fieldMeta] = await Promise.all([
     db.select({ id: activistSpecialties.specialtyId }).from(activistSpecialties).where(eq(activistSpecialties.activistId, activist.id)),
     // the personnel photo is not an evidence document and never satisfies this check
     db.select({ id: documents.id }).from(documents).where(and(eq(documents.applicationId, applicationId), eq(documents.kind, "evidence"))),
+    loadCaseFieldMeta(),
   ]);
-  return missingRequired(activist, specs.length, docs.length, Boolean(activist.photoDocumentId));
+  return missingRequired(activist, specs.length, docs.length, Boolean(activist.photoDocumentId), fieldMeta);
 }

@@ -24,6 +24,8 @@ import { db } from "@/db";
 import { activistSpecialties, activistSpecialtyDetails, caseStepDefinitions, documents, formAnswers, formDefinitions, specialties } from "@/db/schema";
 import { isFieldVisible, type FormAnswers, type FormConfig } from "@/lib/form-config";
 import { specialtyDetailSpec } from "@/lib/constants";
+import { loadCaseFieldMeta } from "@/lib/case-field-meta";
+import { resolvedCaseField, type CaseFieldMetaMap } from "@/lib/case-field-catalog";
 import type { AppStatus } from "@/lib/constants";
 import type { activists } from "@/db/schema";
 
@@ -73,7 +75,7 @@ type ActivistRow = typeof activists.$inferSelect;
  *  loadCaseStepFacts() or assembled directly by the feature tests. */
 export type CaseStepFacts = {
   status: AppStatus;
-  person: Pick<ActivistRow, "firstName" | "lastName" | "fatherName" | "nationalIdHash" | "idCardNumber" | "idIssuePlace" | "birthDate" | "gender" | "phone" | "alternatePhone" | "provinceId" | "countyId" | "photoDocumentId">;
+  person: Pick<ActivistRow, "firstName" | "lastName" | "fatherName" | "nationalIdHash" | "idCardNumber" | "idIssuePlace" | "birthDate" | "gender" | "phone" | "alternatePhone" | "email" | "provinceId" | "countyId" | "photoDocumentId">;
   specialtyCount: number;
   /** Titles of selected specialties whose structured detail is missing. */
   specialtyDetailMissing: string[];
@@ -85,6 +87,8 @@ export type CaseStepFacts = {
   stepFormMissing?: Record<number, string[]>;
   /** آیا برای تعریف مرحله، دست‌کم یک پاسخ ثبت شده است */
   stepFormStarted?: Record<number, boolean>;
+  /** الحاقیهٔ ۲.۲۶.۰ — نگاشت حل‌شدهٔ فیلدهای ثابت (overrideهای مدیریت مراحل) */
+  fieldMeta?: CaseFieldMetaMap;
 };
 
 /** پاسخ پرشده: رشتهٔ ناخالی یا آرایهٔ دارای عضو معنادار */
@@ -93,10 +97,14 @@ function answerFilled(value: unknown): boolean {
   return typeof value === "string" ? value.trim() !== "" : value !== null && value !== undefined && value !== "";
 }
 
+/** الحاقیهٔ ۲.۲۶.۰ — مورد ناقص با کلید پایدار: کلید برای نگاشت راهنما/پرچم بخش
+ *  (مستقل از برچسب ویرایش‌شده) و label برای نمایش. */
+export type MissingCheck = { key: string; label: string };
+
 /** Loads the facts for one case. Callers already hold the application and
  *  activist rows (getCaseForUser), so only the small aggregate queries run. */
 export async function loadCaseStepFacts(person: ActivistRow, status: AppStatus, applicationId: string): Promise<CaseStepFacts> {
-  const [specRows, detailRows, evidenceRows] = await Promise.all([
+  const [specRows, detailRows, evidenceRows, fieldMeta] = await Promise.all([
     db.select({ specialtyId: activistSpecialties.specialtyId, code: specialties.code, title: specialties.title })
       .from(activistSpecialties)
       .innerJoin(specialties, eq(activistSpecialties.specialtyId, specialties.id))
@@ -105,6 +113,8 @@ export async function loadCaseStepFacts(person: ActivistRow, status: AppStatus, 
       .from(activistSpecialtyDetails)
       .where(eq(activistSpecialtyDetails.activistId, person.id)),
     db.select({ id: documents.id }).from(documents).where(and(eq(documents.applicationId, applicationId), eq(documents.kind, "evidence"))),
+    // الحاقیهٔ ۲.۲۶.۰ — overrideهای فیلدهای ثابت (خطا → پیش‌فرض کاتالوگ)
+    loadCaseFieldMeta(),
   ]);
   const detailBySpecialty = new Map(detailRows.map((row) => [row.specialtyId, row]));
   const specialtyDetailMissing: string[] = [];
@@ -144,46 +154,83 @@ export async function loadCaseStepFacts(person: ActivistRow, status: AppStatus, 
       }
     }
   }
-  return { status, person, specialtyCount: specRows.length, specialtyDetailMissing, evidenceCount: evidenceRows.length, photoOk: Boolean(person.photoDocumentId), steps, stepFormMissing, stepFormStarted };
+  return { status, person, specialtyCount: specRows.length, specialtyDetailMissing, evidenceCount: evidenceRows.length, photoOk: Boolean(person.photoDocumentId), steps, stepFormMissing, stepFormStarted, fieldMeta };
 }
 
-/** Missing identity items (step 1). Same field set the submit gate
- *  (missingRequired) has always enforced — kept in sync by tests. */
-export function identityMissing(person: CaseStepFacts["person"]): string[] {
-  const missing: string[] = [];
-  if (!person.firstName || !person.lastName) missing.push("نام و نام خانوادگی");
-  if (!person.fatherName) missing.push("نام پدر");
-  if (!person.nationalIdHash) missing.push("کد ملی معتبر");
-  if (!person.idCardNumber) missing.push("شماره شناسنامه");
-  if (!person.idIssuePlace) missing.push("محل صدور شناسنامه");
-  if (!person.birthDate) missing.push("تاریخ تولد شمسی");
-  if (!person.gender) missing.push("جنسیت");
-  if (!person.phone) missing.push("شماره تماس");
-  if (!person.alternatePhone) missing.push("شماره همراه جایگزین");
-  return missing;
+/** الحاقیهٔ ۲.۲۶.۰ — گزاره‌های نقص مرحلهٔ هویتی با کلید پایدار؛ برچسب‌ها از
+ *  override مدیر می‌آیند و فیلد مخفی‌شده یا بی‌الزام از کنترل خارج می‌شود.
+ *  الزام ترکیبی «نام و نام خانوادگی» روی کلید identity.fullName است. */
+export function identityChecks(person: CaseStepFacts["person"], meta?: CaseFieldMetaMap): MissingCheck[] {
+  const item = (key: string) => resolvedCaseField(meta, key);
+  const checks: MissingCheck[] = [];
+  const first = item("identity.firstName"), last = item("identity.lastName"), nameReq = item("identity.fullName");
+  if (nameReq.required && !(first.hidden && last.hidden) && (!person.firstName || !person.lastName)) {
+    checks.push({ key: "identity.fullName", label: [first.hidden ? null : first.label, last.hidden ? null : last.label].filter(Boolean).join(" و ") || nameReq.label });
+  }
+  for (const [key, value] of [
+    ["identity.fatherName", person.fatherName],
+    ["identity.nationalId", person.nationalIdHash],
+    ["identity.idCardNumber", person.idCardNumber],
+    ["identity.idIssuePlace", person.idIssuePlace],
+    ["identity.birthDate", person.birthDate],
+    ["identity.gender", person.gender],
+    ["identity.phone", person.phone],
+    ["identity.alternatePhone", person.alternatePhone],
+    ["identity.contactEmail", person.email],
+  ] as const) {
+    const resolved = item(key);
+    if (!resolved.required || resolved.hidden || value) continue;
+    checks.push({ key, label: resolved.label });
+  }
+  return checks;
 }
 
-/** Missing location items (step 2). */
-export function locationMissing(person: CaseStepFacts["person"]): string[] {
-  const missing: string[] = [];
-  if (!person.provinceId || !person.countyId) missing.push("استان و شهرستان سکونت");
-  return missing;
+/** Missing identity items (step 1) — display labels (override-aware). */
+export function identityMissing(person: CaseStepFacts["person"], meta?: CaseFieldMetaMap): string[] {
+  return identityChecks(person, meta).map((check) => check.label);
+}
+
+/** Missing location items (step 2) — الزام ترکیبی روی کلید location.residence */
+export function locationChecks(person: CaseStepFacts["person"], meta?: CaseFieldMetaMap): MissingCheck[] {
+  const residence = resolvedCaseField(meta, "location.residence");
+  if (!residence.required || residence.hidden) return [];
+  if (person.provinceId && person.countyId) return [];
+  return [{ key: "location.residence", label: residence.label }];
+}
+
+export function locationMissing(person: CaseStepFacts["person"], meta?: CaseFieldMetaMap): string[] {
+  return locationChecks(person, meta).map((check) => check.label);
 }
 
 /** Missing specialty items (step 3). */
-export function specialtiesMissing(facts: Pick<CaseStepFacts, "specialtyCount" | "specialtyDetailMissing">): string[] {
-  const missing: string[] = [];
-  if (!facts.specialtyCount) missing.push("حداقل یک تخصص قرآنی");
-  if (facts.specialtyDetailMissing.length) missing.push(`جزئیات تخصص‌ها: ${facts.specialtyDetailMissing.join("، ")}`);
-  return missing;
+export function specialtiesChecks(facts: Pick<CaseStepFacts, "specialtyCount" | "specialtyDetailMissing">, meta?: CaseFieldMetaMap): MissingCheck[] {
+  const checks: MissingCheck[] = [];
+  const minOne = resolvedCaseField(meta, "specialties.minOne");
+  if (minOne.required && !facts.specialtyCount) checks.push({ key: "specialties.minOne", label: minOne.label });
+  if (facts.specialtyDetailMissing.length) {
+    const details = resolvedCaseField(meta, "specialties.details");
+    checks.push({ key: "specialties.details", label: `${details.label}: ${facts.specialtyDetailMissing.join("، ")}` });
+  }
+  return checks;
 }
 
-/** Missing documents items (step 4). */
-export function documentsMissing(facts: Pick<CaseStepFacts, "evidenceCount" | "photoOk">): string[] {
-  const missing: string[] = [];
-  if (!facts.evidenceCount) missing.push("حداقل یک مدرک پشتیبان");
-  if (!facts.photoOk) missing.push("تصویر پرسنلی");
-  return missing;
+export function specialtiesMissing(facts: Pick<CaseStepFacts, "specialtyCount" | "specialtyDetailMissing">, meta?: CaseFieldMetaMap): string[] {
+  return specialtiesChecks(facts, meta).map((check) => check.label);
+}
+
+/** Missing documents items (step 4) — ترتیب کنترل مطابق ۲.۱۰.۰: نخست مدارک
+ *  پشتیبان و سپس تصویر پرسنلی (آزمون‌های کهن و پرچم بخش‌ها به همین ترتیب‌اند). */
+export function documentsChecks(facts: Pick<CaseStepFacts, "evidenceCount" | "photoOk">, meta?: CaseFieldMetaMap): MissingCheck[] {
+  const checks: MissingCheck[] = [];
+  const evidence = resolvedCaseField(meta, "documents.evidence");
+  const photo = resolvedCaseField(meta, "documents.photo");
+  if (evidence.required && !facts.evidenceCount) checks.push({ key: "documents.evidence", label: evidence.label });
+  if (photo.required && !facts.photoOk) checks.push({ key: "documents.photo", label: photo.label });
+  return checks;
+}
+
+export function documentsMissing(facts: Pick<CaseStepFacts, "evidenceCount" | "photoOk">, meta?: CaseFieldMetaMap): string[] {
+  return documentsChecks(facts, meta).map((check) => check.label);
 }
 
 const SUBMITTED_STATUSES: ReadonlyArray<AppStatus> = ["pending", "specialist_review", "approved", "rejected"];
@@ -193,26 +240,38 @@ export function reviewMissing(facts: Pick<CaseStepFacts, "status">): string[] {
   return SUBMITTED_STATUSES.includes(facts.status) ? [] : ["کنترل آمادگی و ارسال پرونده برای بررسی"];
 }
 
-type StepCompletion = { missing: string[]; started: boolean };
+type StepCompletion = { missing: string[]; missingKeys: string[]; started: boolean };
 
 /** تکمیل پایهٔ یک مرحلهٔ سیستم بر حسب کلید؛ کلید سفارشی → خالی (فیلدهای
- * سفارشی همان مرحله جداگانه در computeCaseSteps لحاظ می‌شوند). */
+ * سفارشی همان مرحله جداگانه در computeCaseSteps لحاظ می‌شوند).
+ * الحاقیهٔ ۲.۲۶.۰ — برچسب و الزام از meta می‌آید و missingKeys برای نگاشت
+ * راهنما/پرچم بخش با کلید پایدار (مستقل از برچسب ویرایش‌شده) برگردانده می‌شود. */
 function systemCompletion(facts: CaseStepFacts, key: CaseStepKey): StepCompletion {
+  const meta = facts.fieldMeta;
   switch (key) {
     case "identity": {
-      const missing = identityMissing(facts.person);
-      return { missing, started: missing.length < 9 };
+      const checks = identityChecks(facts.person, meta);
+      // «شروع‌شده» = حداقل یک کنترل فعال پاس است: تعداد نقص کمتر از تعداد کل
+      // کنترل‌های الزامیِ فعال (شمارش با شخصِ کاملاً خالی)
+      const activeRequired = identityChecks({ ...facts.person, firstName: "", lastName: "", fatherName: null, nationalIdHash: null, idCardNumber: null, idIssuePlace: null, birthDate: null, gender: null, phone: null, alternatePhone: null, email: null, provinceId: null, countyId: null, photoDocumentId: null }, meta).length;
+      return { missing: checks.map((check) => check.label), missingKeys: checks.map((check) => check.key), started: checks.length < activeRequired };
     }
-    case "location":
-      return { missing: locationMissing(facts.person), started: Boolean(facts.person.provinceId || facts.person.countyId) };
-    case "specialties":
-      return { missing: specialtiesMissing(facts), started: facts.specialtyCount > 0 };
-    case "documents":
-      return { missing: documentsMissing(facts), started: facts.evidenceCount > 0 || facts.photoOk };
+    case "location": {
+      const checks = locationChecks(facts.person, meta);
+      return { missing: checks.map((check) => check.label), missingKeys: checks.map((check) => check.key), started: Boolean(facts.person.provinceId || facts.person.countyId) };
+    }
+    case "specialties": {
+      const checks = specialtiesChecks(facts, meta);
+      return { missing: checks.map((check) => check.label), missingKeys: checks.map((check) => check.key), started: facts.specialtyCount > 0 };
+    }
+    case "documents": {
+      const checks = documentsChecks(facts, meta);
+      return { missing: checks.map((check) => check.label), missingKeys: checks.map((check) => check.key), started: facts.evidenceCount > 0 || facts.photoOk };
+    }
     case "review":
-      return { missing: reviewMissing(facts), started: facts.status === "ready" || SUBMITTED_STATUSES.includes(facts.status) };
+      return { missing: reviewMissing(facts), missingKeys: ["review.send"], started: facts.status === "ready" || SUBMITTED_STATUSES.includes(facts.status) };
     default:
-      return { missing: [], started: false };
+      return { missing: [], missingKeys: [], started: false };
   }
 }
 
@@ -235,6 +294,9 @@ export type CaseStepView = {
   hint: string;
   status: CaseStepStatus;
   missing: string[];
+  /** الحاقیهٔ ۲.۲۶.۰ — کلید پایدار هر مورد ناقص (هم‌اندازهٔ missing) برای
+   *  نگاشت راهنما/پرچم بخش مستقل از برچسب ویرایش‌شده */
+  missingKeys?: string[];
   /** الحاقیهٔ ۲.۲۵.۰ — شناسهٔ تعریف مرحله (۰ در fallback ثابت) و نوع آن */
   definitionId?: number;
   kind?: "system" | "custom";
@@ -261,8 +323,10 @@ export function computeCaseSteps(facts: CaseStepFacts, orderedSteps?: ReadonlyAr
     const base = systemCompletion(facts, step.key);
     const extra = step.definitionId && facts.stepFormMissing ? facts.stepFormMissing[step.definitionId] ?? [] : [];
     const missing = [...base.missing, ...extra];
+    // فیلدهای سفارشی کلید پایدار ندارند؛ کلیدِ برچسبِ خودشان را می‌گیرند
+    const missingKeys = [...base.missingKeys, ...extra];
     const started = base.started || Boolean(step.definitionId && facts.stepFormStarted?.[step.definitionId]);
-    return { missing, started };
+    return { missing, missingKeys, started };
   });
   const activeIndex = completions.findIndex((completion) => completion.missing.length > 0);
   const resolvedIndex = activeIndex === -1 ? steps.length - 1 : activeIndex;
@@ -274,7 +338,7 @@ export function computeCaseSteps(facts: CaseStepFacts, orderedSteps?: ReadonlyAr
     else if (index < resolvedIndex) status = "completed";
     else if (index === resolvedIndex) status = completion.started ? "in_progress" : "incomplete";
     else status = "locked";
-    return { key: step.key, index, title: step.title, hint: step.hint, status, missing: completion.missing, definitionId: step.definitionId || undefined, kind: step.kind };
+    return { key: step.key, index, title: step.title, hint: step.hint, status, missing: completion.missing, missingKeys: completion.missingKeys, definitionId: step.definitionId || undefined, kind: step.kind };
   });
   const completedCount = views.filter((step) => step.status === "completed").length;
   return { steps: views, activeIndex: resolvedIndex, completedCount, totalCount: views.length };
@@ -318,17 +382,41 @@ export function firstIncompleteMessage(plan: CaseStepPlan, skipKey?: CaseStepKey
 // از نو کنترل می‌کند. ارسال نهایی همچنان فقط پس از «آماده» بودن (ready)
 // باز می‌شود و گارد سروری همان است که advanceCase اعمال می‌کند.
 
-/** Guidance for one missing item — actionable, points at the exact field. */
+/** Guidance for one missing item — actionable, points at the exact field.
+ *  الحاقیهٔ ۲.۲۶.۰ — نگاشت کلید-محور: راهنما با کلید پایدار یافت می‌شود تا با
+ *  تغییر برچسب فیلد توسط مدیر همچنان درست بماند؛ READINESS_HINTS (برچسبی)
+ *  به‌عنوان fallback برای موارد بدون کلید حفظ شده است. */
+export const READINESS_KEY_HINTS: Record<string, string> = {
+  "identity.fullName": "فیلدهای نام و نام خانوادگی در بخش «اطلاعات هویتی و تماس» خالی است؛ هر دو را پر کنید.",
+  "identity.fatherName": "فیلد نام پدر در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "identity.nationalId": "کد ملی ۱۰ رقمی معتبر در بخش «اطلاعات هویتی و تماس» ثبت نشده است؛ کد ملی را وارد کنید.",
+  "identity.idCardNumber": "فیلد شماره شناسنامه در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "identity.idIssuePlace": "فیلد محل صدور شناسنامه در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "identity.birthDate": "تاریخ تولد را از تقویم شمسی در بخش «اطلاعات هویتی و تماس» انتخاب کنید.",
+  "identity.gender": "گزینهٔ جنسیت را در بخش «اطلاعات هویتی و تماس» انتخاب کنید.",
+  "identity.phone": "فیلد شماره همراه در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "identity.alternatePhone": "فیلد شماره همراه جایگزین در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "identity.contactEmail": "فیلد ایمیل تماس در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "location.residence": "در بخش «محل سکونت» ابتدا استان و سپس شهرستان را از فهرست انتخاب و فرم را ذخیره کنید.",
+  "specialties.minOne": "در بخش «تخصص‌های قرآنی» حداقل یک تخصص را تیک بزنید.",
+  "documents.photo": "در بخش «تصویر پرسنلی» تصویر پرسنلی PNG یا JPEG با حداکثر حجم ۵۰۰ کیلوبایت بارگذاری کنید.",
+  "documents.evidence": "در بخش «مدارک پشتیبان» حداقل یک مدرک (تصویر کارت ملی، مدرک تحصیلی یا گواهی) بارگذاری کنید.",
+  "review.send": "کنترل آمادگی و ارسال پرونده برای بررسی از مرحلهٔ آخر انجام می‌شود.",
+};
+
 export const READINESS_HINTS: Record<string, string> = {
   "نام و نام خانوادگی": "فیلدهای «نام» و «نام خانوادگی» در بخش «اطلاعات هویتی و تماس» خالی است؛ هر دو را پر کنید.",
   "نام پدر": "فیلد «نام پدر» در بخش «اطلاعات هویتی و تماس» خالی است.",
   "کد ملی معتبر": "کد ملی ۱۰ رقمی معتبر در بخش «اطلاعات هویتی و تماس» ثبت نشده است؛ کد ملی را وارد کنید.",
+  "کد ملی": "کد ملی ۱۰ رقمی معتبر در بخش «اطلاعات هویتی و تماس» ثبت نشده است؛ کد ملی را وارد کنید.",
   "شماره شناسنامه": "فیلد «شماره شناسنامه» در بخش «اطلاعات هویتی و تماس» خالی است.",
   "محل صدور شناسنامه": "فیلد «محل صدور شناسنامه» در بخش «اطلاعات هویتی و تماس» خالی است.",
   "تاریخ تولد شمسی": "تاریخ تولد را از تقویم شمسی در بخش «اطلاعات هویتی و تماس» انتخاب کنید.",
   "جنسیت": "گزینهٔ «جنسیت» را در بخش «اطلاعات هویتی و تماس» انتخاب کنید.",
   "شماره تماس": "فیلد «شماره همراه» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "شماره همراه": "فیلد «شماره همراه» در بخش «اطلاعات هویتی و تماس» خالی است.",
   "شماره همراه جایگزین": "فیلد «شماره همراه جایگزین» در بخش «اطلاعات هویتی و تماس» خالی است.",
+  "ایمیل تماس": "فیلد «ایمیل تماس» در بخش «اطلاعات هویتی و تماس» خالی است.",
   "استان و شهرستان سکونت": "در بخش «محل سکونت» ابتدا استان و سپس شهرستان را از فهرست انتخاب و فرم را ذخیره کنید.",
   "حداقل یک تخصص قرآنی": "در بخش «تخصص‌های قرآنی» حداقل یک تخصص را تیک بزنید.",
   "حداقل یک مدرک پشتیبان": "در بخش «مدارک پشتیبان» حداقل یک مدرک (تصویر کارت ملی، مدرک تحصیلی یا گواهی) بارگذاری کنید.",
@@ -354,8 +442,43 @@ export function readinessHint(label: string): string {
   return READINESS_FALLBACK_HINT;
 }
 
+/** الحاقیهٔ ۲.۲۶.۰ — راهنما با کلید پایدار؛ نبود کلید → برچسبی → پیام عمومی.
+ *  برای جزئیات تخصص‌ها کلید پیشوندی است و راهنمای اختصاصی دارد. */
+export function readinessHintForKey(key: string, label: string): string {
+  const exact = READINESS_KEY_HINTS[key];
+  if (exact) return exact;
+  if (key === "specialties.details") return "برای هر تخصص انتخاب‌شدهٔ دارای جزئیات (میزان حفظ، سطح قرائت یا نقش‌ها)، مقدار جزئیات را در کارت همان تخصص کامل کنید.";
+  return readinessHint(label);
+}
+
 export type ReadinessItem = { label: string; hint: string; section?: string };
 export type ReadinessIssue = { step: number; stepKey: CaseStepKey; stepTitle: string; items: ReadinessItem[] };
+
+/** Section flag per missing item — keyed first (override-proof), then by
+ *  the legacy exact-label map. */
+const KEY_SECTIONS: Record<string, string> = {
+  "identity.fullName": "identity-fields",
+  "identity.fatherName": "identity-fields",
+  "identity.nationalId": "identity-fields",
+  "identity.idCardNumber": "identity-fields",
+  "identity.idIssuePlace": "identity-fields",
+  "identity.birthDate": "identity-fields",
+  "identity.gender": "identity-fields",
+  "identity.phone": "identity-fields",
+  "identity.alternatePhone": "identity-fields",
+  "identity.contactEmail": "identity-fields",
+  "location.residence": "residence",
+  "specialties.minOne": "specialty-grid",
+  "specialties.details": "specialty-details",
+  "documents.photo": "sec-photo",
+  "documents.evidence": "sec-evidence",
+  "documents.docRequests": "sec-evidence",
+};
+
+function sectionForKey(key: string, label: string): string | undefined {
+  if (KEY_SECTIONS[key]) return KEY_SECTIONS[key];
+  return sectionForLabel(label);
+}
 
 /** Section flag per missing label — the wizard pages highlight these
  *  containers when the readiness check redirects with ?check=1. */
@@ -375,18 +498,25 @@ function sectionForLabel(label: string): string | undefined {
  *  gates (open correction / document requests) are the same two checks
  *  advanceCase enforces inside its transaction. الحاقیهٔ ۲.۲۵.۰ — شمارهٔ
  *  مراحل از ترتیب فعال DB محاسبه می‌شود و فیلدهای الزامیِ سفارشی هر مرحله
- *  هم در همین گزارش می‌آید (راهنمای عمومی fallback). */
+ *  هم در همین گزارش می‌آید (راهنمای عمومی fallback). الحاقیهٔ ۲.۲۶.۰ —
+ *  راهنما/پرچم با کلید پایدار یافت می‌شود و برچسب مدارک درخواستی از
+ *  override مدیر می‌آید. */
 export function collectReadinessIssues(facts: CaseStepFacts, extra: { openCorrection?: boolean; openDocRequests?: number } = {}, orderedSteps?: ReadonlyArray<OrderedCaseStep>): ReadinessIssue[] {
   const steps = orderedSteps ?? facts.steps ?? DEFAULT_ORDERED_STEPS;
+  const meta = facts.fieldMeta;
+  const docRequestItem = { key: "documents.docRequests", label: resolvedCaseField(meta, "documents.docRequests").label };
   const issues: ReadinessIssue[] = [];
   steps.forEach((step, index) => {
     // موردِ خودِ مرحلهٔ بازبینی (کنشِ ارسال) در گزارش آمادگی نمی‌آید — همان
     // رفتار ۲.۱۹.۳؛ فقط گاردهای باز (اصلاح/مدارک درخواستی) به همان مرحله می‌چسبند.
-    const base = step.key === "review" ? { missing: [] as string[] } : systemCompletion(facts, step.key);
-    const items: ReadinessItem[] = base.missing.map((label) => ({ label, hint: readinessHint(label), section: sectionForLabel(label) }));
+    const base = step.key === "review" ? { missing: [] as string[], missingKeys: [] as string[] } : systemCompletion(facts, step.key);
+    const items: ReadinessItem[] = base.missing.map((label, i) => {
+      const key = base.missingKeys[i] ?? label;
+      return { label, hint: readinessHintForKey(key, label), section: sectionForKey(key, label) };
+    });
     const extraMissing = step.definitionId && facts.stepFormMissing ? facts.stepFormMissing[step.definitionId] ?? [] : [];
     for (const label of extraMissing) items.push({ label, hint: readinessHint(label) });
-    if (step.key === "documents" && extra.openDocRequests) items.push({ label: DOC_REQUESTS_LABEL, hint: readinessHint(DOC_REQUESTS_LABEL), section: "sec-evidence" });
+    if (step.key === "documents" && extra.openDocRequests) items.push({ label: docRequestItem.label, hint: readinessHintForKey(docRequestItem.key, DOC_REQUESTS_LABEL), section: "sec-evidence" });
     if (items.length) issues.push({ step: index + 1, stepKey: step.key, stepTitle: step.title, items });
   });
   if (extra.openCorrection) {
@@ -403,12 +533,14 @@ export function collectReadinessIssues(facts: CaseStepFacts, extra: { openCorrec
 }
 
 /** Section flags for one wizard step view — used by the step pages to
- *  outline exactly the incomplete containers after a readiness redirect. */
-export function readinessFlagSections(step: Pick<CaseStepView, "missing">): string[] {
+ *  outline exactly the incomplete containers after a readiness redirect.
+ *  الحاقیهٔ ۲.۲۶.۰ — با کلید پایدار، مستقل از برچسب ویرایش‌شده. */
+export function readinessFlagSections(step: Pick<CaseStepView, "missing" | "missingKeys">): string[] {
   const sections = new Set<string>();
-  for (const label of step.missing) {
-    const section = sectionForLabel(label);
+  step.missing.forEach((label, index) => {
+    const key = step.missingKeys?.[index] ?? label;
+    const section = sectionForKey(key, label);
     if (section) sections.add(section);
-  }
+  });
   return [...sections];
 }

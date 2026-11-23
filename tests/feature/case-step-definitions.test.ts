@@ -139,7 +139,7 @@ describe("الحاقیهٔ ۲.۲۵.۰ — مدیریت مراحل ثبت پرو�
     expect(steps[1].definitionId).toBe(customStepId);
     const plan = computeCaseSteps({
       status: "completing",
-      person: { firstName: "الف", lastName: "موسوی‌مراحل ۲۵", fatherName: "پ", nationalIdHash: "h", idCardNumber: "1", idIssuePlace: "تهران", birthDate: "1370-01-01", gender: "male", phone: "09123450251", alternatePhone: "09354450251", provinceId: null, countyId: null, photoDocumentId: null },
+      person: { firstName: "الف", lastName: "موسوی‌مراحل ۲۵", fatherName: "پ", nationalIdHash: "h", idCardNumber: "1", idIssuePlace: "تهران", birthDate: "1370-01-01", gender: "male", phone: "09123450251", alternatePhone: "09354450251", email: null, provinceId: null, countyId: null, photoDocumentId: null },
       specialtyCount: 0, specialtyDetailMissing: [], evidenceCount: 0, photoOk: false,
     }, steps);
     expect(plan.steps[1].key).toMatch(/^cs/);
