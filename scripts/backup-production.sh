@@ -44,6 +44,8 @@ fi
 SIZE="$(wc -c < "$FILE" | tr -d ' ')"
 END_MS="$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')"
 DURATION=$(( END_MS - START_MS ))
+# پرش ساعت (NTP) می‌تواند END را پیش از START بگذارد؛ مدت منفی بی‌معنی است
+[ "$DURATION" -lt 0 ] && DURATION=0
 
 # marker file for the dashboard widget («آخرین پشتیبان موفق»)
 cat > "$MARKER_DIR/last-backup" <<JSON
