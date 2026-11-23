@@ -38,7 +38,8 @@ export default async function StepsPage({ searchParams }: { searchParams: Promis
       <StepsManager key={rows.map((row) => `${row.id}:${row.title}:${row.active}:${row.formStatus}:${row.version}:${row.answersCount}`).join("|")} rows={rows} selectedId={selected?.id ?? null} />
       {selected ? <>
         {selected.kind === "system" && fixedFields && <FixedFieldsManager key={fixedFields.map((field) => `${field.key}:${field.label}:${field.required}:${field.hidden}`).join("|")} stepCode={selected.code} stepTitle={selected.title} fields={fixedFields} />}
-        <FormBuilder entityType="case_step" specialtyId={selected.id} specialtyTitle={selected.title} status={selectedDef ? selectedDef.status : "none"} version={selectedDef?.version || 0} answersCount={answersCount} initialConfig={initialConfig} />
+        {/* الحاقیهٔ ۲.۲۸.۲ — کلید FormBuilder به مرحله وصل است تا جابه‌جایی بین مراحل همیشه فیلدهای تازهٔ همان مرحله را نشان دهد */}
+        <FormBuilder key={`case_step:${selected.id}`} entityType="case_step" specialtyId={selected.id} specialtyTitle={selected.title} status={selectedDef ? selectedDef.status : "none"} version={selectedDef?.version || 0} answersCount={answersCount} initialConfig={initialConfig} />
       </> : <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>فرم‌ساز فیلدهای سفارشی</span><h2>انتخاب مرحله</h2><p>برای تعریف یا ویرایش فیلدهای سفارشی یک مرحله، از فهرست «فرم‌ساز» همان مرحله را انتخاب کنید. فیلدهای مراحل سفارشی، کل محتوای آن مرحله را می‌سازند و فیلدهای مراحل پایه، به‌عنوان بخش تکمیلی زیر فرم اصلی نمایش داده می‌شوند.</p></div></div>
         <p className="inline-empty">نمونه: مرحلهٔ سفارشی «مصاحبه و ارزیابی» با فیلد کشویی «وضعیت مصاحبه» و فیلد شرطی «توضیح ارزیاب» که فقط برای گزینهٔ «نیاز به بررسی مجدد» باز می‌شود؛ پاسخ هر پرونده با نسخهٔ فرم در لحظهٔ ثبت ذخیره می‌شود.</p></section>}
     </div></>;

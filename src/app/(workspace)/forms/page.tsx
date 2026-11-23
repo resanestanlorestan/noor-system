@@ -33,7 +33,8 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
       {selected ? <>
         {/* الحاقیهٔ ۲.۲۸.۰ — ویرایشگر پویای فیلد جزئیات تخصص انتخاب‌شده؛ الحاقیهٔ ۲.۲۸.۱ — کلید پنل دیگر به زمان ذخیره وابسته نیست */}
         <SpecialtyFieldsEditor code={selected.code} title={selected.title} meta={data.detailMeta[selected.code] ?? { kind: "none", label: null, hint: null, maxOptions: null, options: [] }} />
-        <FormBuilder specialtyId={selected.id} specialtyTitle={selected.title} status={selectedDef ? selectedDef.status : "none"} version={selectedDef?.version || 0} answersCount={data.usageMap.get(selected.id) || 0} initialConfig={initialConfig} />
+        {/* الحاقیهٔ ۲.۲۸.۲ — کلید FormBuilder به تخصص وصل است: جابه‌جایی بین تخصص‌ها همیشه ساز‌و‌فیلدهای تازهٔ همان تخصص را می‌آورد و با هر ذخیره پنل باز نمی‌بندد */}
+        <FormBuilder key={`specialty:${selected.id}`} specialtyId={selected.id} specialtyTitle={selected.title} status={selectedDef ? selectedDef.status : "none"} version={selectedDef?.version || 0} answersCount={data.usageMap.get(selected.id) || 0} initialConfig={initialConfig} />
       </>
         : <section className="ws-panel detail-section"><div className="detail-section-head"><div><span>فرم‌ساز پویا</span><h2>انتخاب تخصص</h2><p>برای طراحی یا ویرایش فرم یک تخصص، از فهرست «فرم‌ساز» همان تخصص را انتخاب کنید. ساختار فرم به‌صورت نسخه‌بندی‌شده ذخیره می‌شود و پاسخ‌های ثبت‌شده با ویرایش‌های بعدی از بین نمی‌روند.</p></div><Layers size={19} /></div>
           <p className="inline-empty">دو نمونهٔ رایج: در فرم «قرائت قرآن» فیلد چندگزینه‌ای «نوع قرائت» بسازید (تحقیق، ترتیل، تقلیدی) و برای گزینهٔ «تقلیدی» دو فیلد شرطی «نام قاری موردنظر» (متن) و «نمونهٔ صوتی» (فایل صوتی) تعریف کنید.</p></section>}

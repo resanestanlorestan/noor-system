@@ -2,6 +2,13 @@
 // الحاقیهٔ ۲.۲۳.۰ — مدیریت تخصص‌های قرآنی در داشبورد: افزودن، ویرایش نام و
 // توضیح، فعال/غیرفعال، تغییر ترتیب با Drag & Drop (و دکمه‌ها در موبایل) و
 // انتخاب تخصص برای باز کردن فرم‌ساز. همهٔ تغییرات با اکشن سرور و ممیزی ثبت می‌شوند.
+//
+// الحاقیهٔ ۲.۲۸.۲ — ویرایش پیوستهٔ فهرست تخصص‌ها بدون کلیک مجدد «فرم‌ساز»:
+// پس از هر ذخیرهٔ موفق (نام/توضیح، فعال/غیرفعال، افزودن، ترتیب) دادهٔ تازهٔ
+// سرور در همان رندر با state محلی همگام می‌شود — ترتیب محلیِ ذخیره‌نشده حفظ
+// می‌شود، نام/وضعیت/نسخهٔ هر ردیف از سرور تازه می‌شود، تخصص حذف‌شده کنار
+// می‌رود و تخصص تازه در انتها می‌آید؛ هیچ فرم یا پنلی با ذخیره بسته نمی‌شود
+// و فرم «افزودن تخصص» پس از موفقیت برای ثبت بعدی پاک می‌شود.
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -17,6 +24,29 @@ export function SpecialtiesManager({ rows, selectedId }: { rows: ManagedSpecialt
   const [orderPending, setOrderPending] = useState(false);
   const [metaState, metaAction, metaPending] = useActionState(saveSpecialtyMetaAction, initialActionState);
   const [addState, addAction, addPending] = useActionState(createSpecialtyAction, initialActionState);
+  const [toggleState, toggleAction, togglePending] = useActionState(async (_state: Awaited<ReturnType<typeof toggleSpecialtyAction>>, data: FormData) => toggleSpecialtyAction(data), initialActionState);
+  // الگوی رسمی ری‌اکت برای همگام‌سازی state وابسته به پراپ: مقایسه در خود رندر
+  const [lastRows, setLastRows] = useState(rows);
+  if (rows !== lastRows) {
+    setLastRows(rows);
+    setList((current) => {
+      const freshById = new Map(rows.map((row) => [row.id, row]));
+      const kept: ManagedSpecialty[] = [];
+      for (const item of current) {
+        const fresh = freshById.get(item.id);
+        if (fresh) kept.push(fresh);
+      }
+      const appended = rows.filter((row) => !current.some((item) => item.id === row.id));
+      return [...kept, ...appended];
+    });
+  }
+  // فرم افزودن پس از ثبت موفق پاک می‌شود تا افزودن پیاپی ممکن باشد
+  const [lastAddState, setLastAddState] = useState(addState);
+  const [addNonce, setAddNonce] = useState(0);
+  if (addState !== lastAddState) {
+    setLastAddState(addState);
+    if (addState.success) setAddNonce((n) => n + 1);
+  }
   const move = (index: number, delta: number) => {
     setList((current) => {
       const next = [...current];
@@ -45,7 +75,7 @@ export function SpecialtiesManager({ rows, selectedId }: { rows: ManagedSpecialt
 
   return <section className="ws-panel detail-section">
     <div className="detail-section-head"><div><span>مدیریت تخصص‌های قرآنی</span><h2>فهرست تخصص‌ها</h2><p>افزودن، ویرایش نام و توضیح، فعال/غیرفعال، ترتیب نمایش و حذف هر تخصص — قدیمی یا جدید — از همین‌جا انجام می‌شود؛ انتخاب یک تخصص، فرم‌ساز آن را باز می‌کند. حذف تنها زمانی انجام می‌شود که تخصص در هیچ پرونده، حساب، ارجاع، دوره یا فرم پویایی استفاده نشده باشد؛ در غیر این صورت آن را «غیرفعال» کنید تا سوابق دست‌نخورده بماند.</p></div></div>
-    <form action={addAction} className="management-form">
+    <form key={addNonce} action={addAction} className="management-form">
       <div className="form-grid">
         <label>افزودن تخصص جدید<input name="title" maxLength={100} required placeholder="مثلاً حفظ قرآن" /></label>
         <label>توضیح و راهنمای تخصص<input name="description" maxLength={500} placeholder="اختیاری" /></label>
@@ -69,10 +99,10 @@ export function SpecialtiesManager({ rows, selectedId }: { rows: ManagedSpecialt
             <input type="hidden" name="specialtyId" value={item.id} />
             <button type="submit" className="row-remove" title="حذف تخصص" onClick={(event) => { if (!window.confirm(`تخصص «${item.title}» از فهرست حذف شود؟\n\nحذف تنها زمانی انجام می‌شود که این تخصص در هیچ پروندهٔ فعالان، حساب کارشناسی، ارجاع کارشناسی، دورهٔ آموزشی یا فرم پویا استفاده نشده باشد؛ در غیر این صورت سامانه حذف را رد می‌کند و تعداد وابستگی‌ها را اعلام می‌کند. این عمل پس از تأیید برگشت‌ناپذیر است.`)) event.preventDefault(); }}><Trash2 size={14} /></button>
           </form>
-          <form action={async (fd: FormData) => { await toggleSpecialtyAction(fd); }} className="inline-form">
+          <form action={toggleAction} className="inline-form">
             <input type="hidden" name="specialtyId" value={item.id} />
             <input type="hidden" name="active" value={item.active ? "0" : "1"} />
-            <button type="submit" className={item.active ? "row-remove" : "secondary-button"}>{item.active ? "غیرفعال" : "فعال"}</button>
+            <button type="submit" className={item.active ? "row-remove" : "secondary-button"} disabled={togglePending}>{item.active ? "غیرفعال" : "فعال"}</button>
           </form>
           <Link className="secondary-button" href={`/forms?sp=${item.id}`}>فرم‌ساز</Link>
         </span>
@@ -89,5 +119,7 @@ export function SpecialtiesManager({ rows, selectedId }: { rows: ManagedSpecialt
     <button type="button" className="secondary-button" onClick={() => saveOrder(list)} disabled={orderPending}>{orderPending ? <LoaderCircle className="spin" size={16} /> : "ذخیرهٔ ترتیب فعلی"}</button>
     {metaState.error && <div className="form-error" role="alert">{metaState.error}</div>}
     {metaState.success && <div className="form-success" role="status">{metaState.success}</div>}
+    {toggleState.error && <div className="form-error" role="alert">{toggleState.error}</div>}
+    {toggleState.success && <div className="form-success" role="status">{toggleState.success}</div>}
   </section>;
 }
