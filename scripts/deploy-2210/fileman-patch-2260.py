@@ -128,7 +128,10 @@ try {{
     $o['zip_standalone_version'] = is_array($spj) ? ($spj['version'] ?? '?') : '?';
     $tpj = json_decode((string)$zip->getFromName('noor-system/package.json'), true);
     $o['zip_top_version'] = is_array($tpj) ? ($tpj['version'] ?? '?') : '?';
-    if (!($o['zip_steps_page'] && $o['zip_steps_manager'] && $o['zip_dynamic_engine'] && $o['zip_case_step_form'] && $o['zip_migrate_sql'] && $o['zip_migrate_js'] && $o['zip_specialty_delete'] && $o['zip_build_id'] && $o['zip_catalog'] && $o['zip_overrides_schema'] && $o['zip_ff_manager'] && $o['zip_ff_page'] && $o['zip_ff_actions'] && $o['zip_migrate_0032_sql'] && $o['zip_migrate_0032_js'] && $o['zip_standalone_version'] === '{VERSION}' && $o['zip_top_version'] === '{VERSION}')) throw new Exception('patch gate fail');
+    // گیت پچ تفاوتی‌محور ۲.۲۶.۰ — فقط مدخل‌های تضمینیِ همین پچ؛ فایل‌های
+    // تغییر‌نیافتهٔ ۲.۲۵ (steps-manager/case-step-form/۰۰۳۱) در پچ نیستند و
+    // کنترل آن‌ها به گیت‌های دیسکِ پس از اکسترکت واگذار شده است
+    if (!($o['zip_steps_page'] && $o['zip_dynamic_engine'] && $o['zip_build_id'] && $o['zip_catalog'] && $o['zip_overrides_schema'] && $o['zip_ff_manager'] && $o['zip_ff_page'] && $o['zip_ff_actions'] && $o['zip_migrate_0032_sql'] && $o['zip_migrate_0032_js'] && $o['zip_standalone_version'] === '{VERSION}' && $o['zip_top_version'] === '{VERSION}')) throw new Exception('patch gate fail');
     if (!$zip->extractTo($H)) throw new Exception('extract fail');
     $zip->close();
     clearstatcache();

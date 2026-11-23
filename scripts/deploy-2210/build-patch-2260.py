@@ -4,7 +4,7 @@
 import hashlib, json, zipfile
 
 ZIP = "/home/z/my-project/download/noor-slim-2.26.0.zip"
-HOSTMAP = "/tmp/host-md5-2210.json"
+HOSTMAP = "/tmp/host-md5-2260.json"
 OUT = "/home/z/my-project/download/noor-patch-2260.zip"
 PREFIX = "noor-system/"
 
